@@ -1,0 +1,5 @@
+/*
+  Content-Security-Policy: frame-ancestors https://*.zoom.us
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
