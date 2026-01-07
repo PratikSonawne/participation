@@ -1,0 +1,49 @@
+<h3>👥 Meeting Participants</h3>
+
+<table border="1" cellpadding="8">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Join Time</th>
+      <th>Leave Time</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr *ngFor="let p of participants">
+      <td>{{ p.userName }}</td>
+      <td>{{ p.joinTime || '-' }}</td>
+      <td>{{ p.leaveTime || 'In Meeting' }}</td>
+    </tr>
+  </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- <h3>👥 Live Participants</h3>
+
+<p><b>Meeting ID:</b> {{ meetingId }}</p>
+<p><b>Total:</b> {{ participants.length }}</p>
+
+<ul>
+  <li *ngFor="let p of participants">{{ p }}</li>
+</ul>
+
+<p *ngIf="participants.length === 0">
+  Waiting for participants...
+</p> -->
