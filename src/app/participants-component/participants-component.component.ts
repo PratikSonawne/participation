@@ -7,129 +7,73 @@ interface Participant {
   joinTime?: string;
   leaveTime?: string;
 }
+interface Log {
+  time: string;
+  message: string;
+  type: 'info' | 'success' | 'error';
+}
 
 @Component({
   selector: 'app-participants-component',
   templateUrl: './participants-component.component.html',
   styleUrls: ['./participants-component.component.css']
 })
-export class ParticipantsComponentComponent implements OnInit, OnDestroy {
+export class ParticipantsComponentComponent implements OnInit {
 
-  participants: Participant[] = [];
-  private participantMap = new Map<string, Participant>();
+  logs: Log[] = [];
+  participants: any[] = [];
+  sdkConnected = false;
 
-  // keep handler reference (IMPORTANT for off())
-  private participantChangeHandler = (event: any) => {
-    this.handleParticipantChange(event);
-  };
-
-  async ngOnInit() {
-    await this.initZoomSdk();
-    await this.loadInitialParticipants();
-    this.registerRealtimeEvents();
+  ngOnInit() {
+    this.addLog('App Loaded', 'info');
+    this.initSdk();
   }
 
-  ngOnDestroy() {
-    zoomSdk.off('onParticipantChange', this.participantChangeHandler);
+  addLog(message: string, type: Log['type']) {
+    this.logs.unshift({
+      time: new Date().toLocaleTimeString(),
+      message,
+      type
+    });
   }
 
-  // 🔹 STEP 1: Init SDK
-  async initZoomSdk() {
+  async initSdk() {
     try {
+      if (!zoomSdk) {
+        this.addLog('zoomSdk NOT found', 'error');
+        return;
+      }
+
+      this.addLog('zoomSdk found', 'success');
+
       await zoomSdk.config({
-        capabilities: [
-          'getMeetingParticipants',
-          'onParticipantChange'
-        ]
+        capabilities: ['getMeetingParticipants']
       });
 
-      console.log('✅ Zoom SDK initialized');
-    } catch (e) {
-      console.error('❌ Zoom SDK init failed', e);
+      this.sdkConnected = true;
+      this.addLog('zoomSdk.config SUCCESS', 'success');
+
+      await this.loadParticipants();
+
+    } catch (e: any) {
+      this.addLog('SDK ERROR: ' + (e?.message || 'Unknown error'), 'error');
     }
   }
 
-  // 🔹 STEP 2: Load initial participants
-  async loadInitialParticipants() {
-    const res = await zoomSdk.getMeetingParticipants();
-    const now = new Date().toISOString();
+  async loadParticipants() {
+    try {
+      this.addLog('Fetching participants...', 'info');
 
-    this.participantMap.clear();
+      const res = await zoomSdk.getMeetingParticipants();
+      this.participants = res?.participants || [];
 
-    res.participants.forEach((p: any) => {
-      this.participantMap.set(p.participantId, {
-        participantId: p.participantId,
-        userName: p.userName,
-        joinTime: now
-      });
-    });
+      this.addLog(
+        `Participants loaded: ${this.participants.length}`,
+        'success'
+      );
 
-    this.refreshList();
-  }
-
-  // 🔹 STEP 3: Register realtime updates
-  registerRealtimeEvents() {
-    zoomSdk.on('onParticipantChange', this.participantChangeHandler);
-  }
-
-  // 🔹 STEP 4: Handle participant change (JOIN / LEAVE detection)
-  private handleParticipantChange(event: any) {
-    const now = new Date().toISOString();
-    const currentIds = new Set<string>();
-
-    event.participants.forEach((p: any) => {
-      currentIds.add(p.participantId);
-
-      // JOIN
-      if (!this.participantMap.has(p.participantId)) {
-        this.participantMap.set(p.participantId, {
-          participantId: p.participantId,
-          userName: p.userName,
-          joinTime: now
-        });
-      }
-    });
-
-    // LEAVE
-    this.participantMap.forEach((value, key) => {
-      if (!currentIds.has(key) && !value.leaveTime) {
-        value.leaveTime = now;
-      }
-    });
-
-    this.refreshList();
-  }
-
-  // 🔹 Refresh UI list
-  private refreshList() {
-    this.participants = Array.from(this.participantMap.values());
+    } catch (e: any) {
+      this.addLog('getMeetingParticipants FAILED', 'error');
+    }
   }
 }
-
-
-
-// import { Component, OnDestroy, OnInit } from '@angular/core';
-// import { RealtimeService } from '../realtime.service';
-
-// @Component({
-//   selector: 'app-participants-component',
-//   templateUrl: './participants-component.component.html',
-//   styleUrls: ['./participants-component.component.css']
-// })
-// export class ParticipantsComponentComponent implements OnInit, OnDestroy {
-//   meetingId = '';
-//   participants: string[] = [];
-
-//   constructor(private realtime: RealtimeService) {}
-
-//   ngOnInit(): void {
-//     this.realtime.connect((data) => {
-//       this.meetingId = data.meetingId;
-//       this.participants = data.participants || [];
-//     });
-//   }
-
-//   ngOnDestroy(): void {
-//     this.realtime.disconnect();
-//   }
-// }
