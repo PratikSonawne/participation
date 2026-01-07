@@ -1,46 +1,27 @@
 .panel {
-  padding: 10px;
-  font-size: 12px;
+  font-family: monospace;
   color: #fff;
 }
 
-.ok {
-  color: #00ff9c;
-  font-weight: bold;
-}
-
-.fail {
-  color: #ff4d4f;
-  font-weight: bold;
+button {
+  margin-right: 10px;
+  padding: 5px 12px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 8px;
 }
 
-th, td {
-  border: 1px solid #444;
-  padding: 4px;
+td, th {
+  border: 1px solid #555;
+  padding: 6px;
 }
 
 .logs {
-  background: #000;
-  padding: 6px;
-  max-height: 200px;
+  background: black;
+  color: #00ff00;
+  max-height: 150px;
   overflow-y: auto;
-  font-family: monospace;
-}
-
-.info {
-  color: #ccc;
-}
-
-.success {
-  color: #00ff9c;
-}
-
-.error {
-  color: #ff4d4f;
+  padding: 8px;
 }

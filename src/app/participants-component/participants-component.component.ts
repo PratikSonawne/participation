@@ -7,73 +7,127 @@ interface Participant {
   joinTime?: string;
   leaveTime?: string;
 }
-interface Log {
-  time: string;
-  message: string;
-  type: 'info' | 'success' | 'error';
-}
-
 @Component({
   selector: 'app-participants-component',
   templateUrl: './participants-component.component.html',
   styleUrls: ['./participants-component.component.css']
 })
-export class ParticipantsComponentComponent implements OnInit {
+export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
-  logs: Log[] = [];
-  participants: any[] = [];
-  sdkConnected = false;
+  sdkStatus = 'NOT CONNECTED';
+  isMuted = false;
 
-  ngOnInit() {
-    this.addLog('App Loaded', 'info');
-    this.initSdk();
+  participants: Participant[] = [];
+  logs: string[] = [];
+
+  // keep handler reference (IMPORTANT)
+  private participantChangeHandler = (event: any) => this.onParticipantChange(event);
+
+  async ngOnInit() {
+    this.log('App Loaded');
+    await this.initSdk();
+    await this.loadParticipants();
+    this.registerParticipantListener();
   }
 
-  addLog(message: string, type: Log['type']) {
-    this.logs.unshift({
-      time: new Date().toLocaleTimeString(),
-      message,
-      type
-    });
+  ngOnDestroy() {
+    // ✅ off() MUST receive handler
+    zoomSdk.off('onParticipantChange', this.participantChangeHandler);
   }
+
+  /* ================= SDK INIT ================= */
 
   async initSdk() {
     try {
-      if (!zoomSdk) {
-        this.addLog('zoomSdk NOT found', 'error');
-        return;
-      }
-
-      this.addLog('zoomSdk found', 'success');
-
+      this.log('Initializing Zoom SDK...');
       await zoomSdk.config({
-        capabilities: ['getMeetingParticipants']
+        capabilities: [
+          'getMeetingParticipants',
+          'onParticipantChange',
+          'setAudioState'
+        ]
       });
 
-      this.sdkConnected = true;
-      this.addLog('zoomSdk.config SUCCESS', 'success');
-
-      await this.loadParticipants();
-
-    } catch (e: any) {
-      this.addLog('SDK ERROR: ' + (e?.message || 'Unknown error'), 'error');
+      this.sdkStatus = 'CONNECTED';
+      this.log('Zoom SDK CONNECTED');
+    } catch (e) {
+      this.sdkStatus = 'FAILED';
+      this.log('SDK INIT FAILED');
     }
   }
 
+  /* ================= PARTICIPANTS ================= */
+
   async loadParticipants() {
     try {
-      this.addLog('Fetching participants...', 'info');
-
+      this.log('Fetching participants...');
       const res = await zoomSdk.getMeetingParticipants();
-      this.participants = res?.participants || [];
 
-      this.addLog(
-        `Participants loaded: ${this.participants.length}`,
-        'success'
-      );
+      const now = new Date().toISOString();
+      this.participants = res.participants.map((p: any) => ({
+        participantId: p.participantId,
+        userName: p.userName,
+        joinTime: now
+      }));
 
-    } catch (e: any) {
-      this.addLog('getMeetingParticipants FAILED', 'error');
+      this.log(`Loaded ${this.participants.length} participants`);
+    } catch {
+      this.log('getMeetingParticipants FAILED');
     }
+  }
+
+  registerParticipantListener() {
+    zoomSdk.on('onParticipantChange', this.participantChangeHandler);
+  }
+
+  onParticipantChange(event: any) {
+    const now = new Date().toISOString();
+
+    event.joined?.forEach((p: any) => {
+      this.participants.push({
+        participantId: p.participantId,
+        userName: p.userName,
+        joinTime: now
+      });
+      this.log(`JOIN: ${p.userName}`);
+    });
+
+    event.left?.forEach((p: any) => {
+      const found = this.participants.find(x => x.participantId === p.participantId);
+      if (found) {
+        found.leaveTime = now;
+        this.log(`LEAVE: ${found.userName}`);
+      }
+    });
+  }
+
+  /* ================= AUDIO CONTROL ================= */
+
+ async mute() {
+  try {
+    await zoomSdk.setAudioState({ audio: false });
+    this.isMuted = true;
+    this.log('Muted self');
+  } catch {
+    this.log('Mute FAILED');
+  }
+}
+
+async unmute() {
+  try {
+    await zoomSdk.setAudioState({ audio: true });
+    this.isMuted = false;
+    this.log('Unmuted self');
+  } catch {
+    this.log('Unmute FAILED');
+  }
+}
+
+
+  /* ================= UI LOGS ================= */
+
+  log(msg: string) {
+    const time = new Date().toLocaleTimeString();
+    this.logs.unshift(`[${time}] ${msg}`);
   }
 }

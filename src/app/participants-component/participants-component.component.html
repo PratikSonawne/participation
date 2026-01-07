@@ -4,36 +4,41 @@
 
   <p>
     SDK Status:
-    <span [class.ok]="sdkConnected" [class.fail]="!sdkConnected">
-      {{ sdkConnected ? 'CONNECTED' : 'NOT CONNECTED' }}
+    <span [style.color]="sdkStatus === 'CONNECTED' ? 'lightgreen' : 'red'">
+      {{ sdkStatus }}
     </span>
   </p>
 
-  <hr />
+  <hr>
+
+  <h4>🔊 Audio Control</h4>
+  <button (click)="mute()" [disabled]="isMuted">Mute</button>
+  <button (click)="unmute()" [disabled]="!isMuted">Unmute</button>
+
+  <hr>
 
   <h4>👥 Participants ({{ participants.length }})</h4>
 
   <table *ngIf="participants.length > 0">
     <tr>
       <th>Name</th>
-      <th>ID</th>
+      <th>Join Time</th>
+      <th>Leave Time</th>
     </tr>
     <tr *ngFor="let p of participants">
       <td>{{ p.userName }}</td>
-      <td>{{ p.participantId }}</td>
+      <td>{{ p.joinTime || '-' }}</td>
+      <td>{{ p.leaveTime || '-' }}</td>
     </tr>
   </table>
 
-  <p *ngIf="participants.length === 0">No participants loaded</p>
+  <p *ngIf="participants.length === 0">No participants</p>
 
-  <hr />
+  <hr>
 
-  <h4>📜 Debug Logs</h4>
-
+  <h4>🪵 Debug Logs</h4>
   <div class="logs">
-    <div *ngFor="let log of logs" [class]="log.type">
-      [{{ log.time }}] {{ log.message }}
-    </div>
+    <div *ngFor="let l of logs">{{ l }}</div>
   </div>
 
 </div>
