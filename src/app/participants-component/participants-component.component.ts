@@ -46,35 +46,22 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   /* ================= SDK INIT ================= */
 
-  async initSdk(): Promise<boolean> {
-    try {
-      this.log('Initializing Zoom SDK...');
-
-      await zoomSdk.config({
-        capabilities: [
-          'getMeetingParticipants',
-          'onParticipantChange',
-          'getMeetingContext',
-          'getRunningContext',
-          'getUserContext',
-          'setAudioState'
-        ]
-      });
-
-      const user: any = await zoomSdk.getUserContext();
-      this.log(`Role: ${user.role}`);
-
-      this.sdkStatus = 'CONNECTED';
-      this.log('Zoom SDK CONNECTED');
-      return true;
-
-    } catch (e) {
-      console.error('Zoom SDK init error:', e);
-      this.sdkStatus = 'FAILED';
-      this.log('SDK INIT FAILED');
-      return false;
-    }
+ async initSdk(): Promise<boolean> {
+  try {
+    await zoomSdk.config({
+      capabilities: ['getRunningContext']
+    });
+    this.sdkStatus = 'CONNECTED';
+    this.log('Zoom SDK CONNECTED');
+    return true;
+  } catch (e) {
+    console.error(e);
+    this.sdkStatus = 'FAILED';
+    this.log('SDK INIT FAILED');
+    return false;
   }
+}
+
 
   async checkRunningContext() {
     try {
