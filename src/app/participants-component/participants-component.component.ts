@@ -21,18 +21,23 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   participants: Participant[] = [];
   logs: string[] = [];
 
-  // keep handler reference (IMPORTANT)
-  private participantChangeHandler = (event: any) => this.onParticipantChange(event);
+  // keep handler reference
+  private participantChangeHandler = async (_event: any) => {
+    this.log('Participant change detected');
+    await this.syncParticipants(); // 🔑 KEY FIX
+  };
+
+  /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
     this.log('App Loaded');
     await this.initSdk();
-    await this.loadParticipants();
+    await this.checkRunningContext();
+    await this.syncParticipants(); // initial load
     this.registerParticipantListener();
   }
 
   ngOnDestroy() {
-    // ✅ off() MUST receive handler
     zoomSdk.off('onParticipantChange', this.participantChangeHandler);
   }
 
@@ -45,6 +50,8 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
         capabilities: [
           'getMeetingParticipants',
           'onParticipantChange',
+          'getMeetingContext',
+          'getRunningContext',
           'setAudioState'
         ]
       });
@@ -57,77 +64,78 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
     }
   }
 
-  /* ================= PARTICIPANTS ================= */
-
- async loadParticipants() {
-  try {
-    this.log('Fetching participants...');
-    const res = await zoomSdk.getMeetingParticipants();
-    const now = new Date().toISOString();
-
-    this.participants = res.participants.map((p: any) => ({
-      participantUUID: p.participantUUID,
-      screenName: p.screenName,
-      joinTime: now
-    }));
-
-    this.log(`Loaded ${this.participants.length} participants`);
-  } catch {
-    this.log('getMeetingParticipants FAILED');
-  }
+async checkRunningContext() {
+  const ctx: any = await zoomSdk.getRunningContext();
+  const runningContext = ctx.runningContext || ctx.context;
+  this.log(`Running Context: ${runningContext}`);
 }
 
+
+  /* ================= PARTICIPANT SYNC ================= */
+
+  async syncParticipants() {
+    try {
+      const now = new Date().toISOString();
+      const res = await zoomSdk.getMeetingParticipants();
+
+      // JOIN detection
+      res.participants.forEach((p: any) => {
+        const exists = this.participants.find(
+          x => x.participantUUID === p.participantUUID
+        );
+
+        if (!exists) {
+          this.participants.push({
+            participantUUID: p.participantUUID,
+            screenName: p.screenName,
+            joinTime: now
+          });
+          this.log(`JOIN: ${p.screenName}`);
+        }
+      });
+
+      // LEAVE detection
+      this.participants.forEach(p => {
+        const stillInMeeting = res.participants.some(
+          (rp: any) => rp.participantUUID === p.participantUUID
+        );
+
+        if (!stillInMeeting && !p.leaveTime) {
+          p.leaveTime = now;
+          this.log(`LEAVE: ${p.screenName}`);
+        }
+      });
+
+    } catch {
+      this.log('Participant sync FAILED');
+    }
+  }
 
   registerParticipantListener() {
     zoomSdk.on('onParticipantChange', this.participantChangeHandler);
   }
 
-onParticipantChange(event: any) {
-  const now = new Date().toISOString();
-
-  event.joined?.forEach((p: any) => {
-    this.participants.push({
-      participantUUID: p.participantUUID,
-      screenName: p.screenName,
-      joinTime: now
-    });
-    this.log(`JOIN: ${p.screenName}`);
-  });
-
-  event.left?.forEach((p: any) => {
-    const found = this.participants.find(
-      x => x.participantUUID === p.participantUUID
-    );
-    if (found) {
-      found.leaveTime = now;
-      this.log(`LEAVE: ${found.screenName}`);
-    }
-  });
-}
-
-
   /* ================= AUDIO CONTROL ================= */
 
- async mute() {
-  try {
-    await zoomSdk.setAudioState({ audio: false });
-    this.isMuted = true;
-    this.log('Muted self');
-  } catch {
-    this.log('Mute FAILED');
+  async mute() {
+    try {
+      await zoomSdk.setAudioState({ audio: false });
+      this.isMuted = true;
+      this.log('Muted self');
+    } catch {
+      this.log('Mute FAILED');
+    }
   }
-}
 
-async unmute() {
-  try {
-    await zoomSdk.setAudioState({ audio: true });
-    this.isMuted = false;
-    this.log('Unmuted self');
-  } catch {
-    this.log('Unmute FAILED');
+  async unmute() {
+    try {
+      await zoomSdk.setAudioState({ audio: true });
+      this.isMuted = false;
+      this.log('Unmuted self');
+    } catch {
+      this.log('Unmute FAILED');
+    }
   }
-}
-
 
   /* ================= UI LOGS ================= */
 
