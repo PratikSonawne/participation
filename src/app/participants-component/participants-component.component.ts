@@ -22,9 +22,9 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   logs: string[] = [];
 
   // keep handler reference (IMPORTANT)
-  private participantChangeHandler = async (_event: any) => {
+  private participantChangeHandler = async () => {
     this.log('Participant change detected');
-    await this.syncParticipants();
+    await this.syncParticipants();   // 🔑 realtime refresh
   };
 
   /* ================= LIFECYCLE ================= */
@@ -32,12 +32,11 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.log('App Loaded');
 
-    const initialized = await this.initSdk();
-    if (!initialized) return; // ⛔ stop if SDK failed
+    const ok = await this.initSdk();
+    if (!ok) return; // ⛔ stop if SDK failed
 
-    await this.checkRunningContext();
-    await this.syncParticipants(); // initial load
-    this.registerParticipantListener();
+    await this.syncParticipants();       // initial load
+    this.registerParticipantListener();  // realtime
   }
 
   ngOnDestroy() {
@@ -46,30 +45,27 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   /* ================= SDK INIT ================= */
 
- async initSdk(): Promise<boolean> {
-  try {
-    await zoomSdk.config({
-      capabilities: ['getRunningContext']
-    });
-    this.sdkStatus = 'CONNECTED';
-    this.log('Zoom SDK CONNECTED');
-    return true;
-  } catch (e) {
-    console.error(e);
-    this.sdkStatus = 'FAILED';
-    this.log('SDK INIT FAILED');
-    return false;
-  }
-}
-
-
-  async checkRunningContext() {
+  async initSdk(): Promise<boolean> {
     try {
-      const ctx: any = await zoomSdk.getRunningContext();
-      const runningContext = ctx.runningContext || ctx.context || 'unknown';
-      this.log(`Running Context: ${runningContext}`);
-    } catch {
-      this.log('Failed to get running context');
+      this.log('Initializing Zoom SDK...');
+
+      await zoomSdk.config({
+        capabilities: [
+          'getMeetingParticipants',
+          'onParticipantChange',
+          'setAudioState'
+        ]
+      });
+
+      this.sdkStatus = 'CONNECTED';
+      this.log('Zoom SDK CONNECTED');
+      return true;
+
+    } catch (e) {
+      console.error(e);
+      this.sdkStatus = 'FAILED';
+      this.log('SDK INIT FAILED');
+      return false;
     }
   }
 
@@ -98,11 +94,11 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
       // LEAVE detection
       this.participants.forEach(p => {
-        const stillPresent = res.participants.some(
+        const stillHere = res.participants.some(
           (rp: any) => rp.participantUUID === p.participantUUID
         );
 
-        if (!stillPresent && !p.leaveTime) {
+        if (!stillHere && !p.leaveTime) {
           p.leaveTime = now;
           this.log(`LEAVE: ${p.screenName}`);
         }

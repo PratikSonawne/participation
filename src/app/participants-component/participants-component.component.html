@@ -1,44 +1,24 @@
-<div class="panel">
+<h3>SDK Status: {{ sdkStatus }}</h3>
 
-  <h3>🧪 Zoom SDK Debug Panel</h3>
+<button (click)="mute()">Mute</button>
+<button (click)="unmute()">Unmute</button>
 
-  <p>
-    SDK Status:
-    <span [style.color]="sdkStatus === 'CONNECTED' ? 'lightgreen' : 'red'">
-      {{ sdkStatus }}
-    </span>
-  </p>
+<h3>Participants ({{ participants.length }})</h3>
 
-  <hr>
+<table *ngIf="participants.length > 0">
+  <tr>
+    <th>Name</th>
+    <th>Join Time</th>
+    <th>Leave Time</th>
+  </tr>
+  <tr *ngFor="let p of participants">
+    <td>{{ p.screenName }}</td>
+    <td>{{ p.joinTime || '-' }}</td>
+    <td>{{ p.leaveTime || '-' }}</td>
+  </tr>
+</table>
 
-  <h4>🔊 Audio Control</h4>
-  <button (click)="mute()" [disabled]="isMuted">Mute</button>
-  <button (click)="unmute()" [disabled]="!isMuted">Unmute</button>
+<p *ngIf="participants.length === 0">No participants</p>
 
-  <hr>
-
-  <h4>👥 Participants ({{ participants.length }})</h4>
-
-  <table *ngIf="participants.length > 0">
-    <tr>
-      <th>Name</th>
-      <th>Join Time</th>
-      <th>Leave Time</th>
-    </tr>
-    <tr *ngFor="let p of participants">
-      <td>{{ p.screenName }}</td>
-      <td>{{ p.joinTime || '-' }}</td>
-      <td>{{ p.leaveTime || '-' }}</td>
-    </tr>
-  </table>
-
-  <p *ngIf="participants.length === 0">No participants</p>
-
-  <hr>
-
-  <h4>🪵 Debug Logs</h4>
-  <div class="logs">
-    <div *ngFor="let l of logs">{{ l }}</div>
-  </div>
-
-</div>
+<h3>Debug Logs</h3>
+<div *ngFor="let log of logs">{{ log }}</div>
