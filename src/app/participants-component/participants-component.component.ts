@@ -21,17 +21,20 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   participants: Participant[] = [];
   logs: string[] = [];
 
-  // keep handler reference
+  // keep handler reference (IMPORTANT)
   private participantChangeHandler = async (_event: any) => {
     this.log('Participant change detected');
-    await this.syncParticipants(); // 🔑 KEY FIX
+    await this.syncParticipants();
   };
 
   /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
     this.log('App Loaded');
-    await this.initSdk();
+
+    const initialized = await this.initSdk();
+    if (!initialized) return; // ⛔ stop if SDK failed
+
     await this.checkRunningContext();
     await this.syncParticipants(); // initial load
     this.registerParticipantListener();
@@ -43,35 +46,45 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   /* ================= SDK INIT ================= */
 
-  async initSdk() {
+  async initSdk(): Promise<boolean> {
     try {
       this.log('Initializing Zoom SDK...');
+
       await zoomSdk.config({
         capabilities: [
           'getMeetingParticipants',
           'onParticipantChange',
           'getMeetingContext',
           'getRunningContext',
+          'getUserContext',
           'setAudioState'
         ]
       });
-const user: any = await zoomSdk.getUserContext();
-this.log(`Role: ${user.role}`);
+
+      const user: any = await zoomSdk.getUserContext();
+      this.log(`Role: ${user.role}`);
 
       this.sdkStatus = 'CONNECTED';
       this.log('Zoom SDK CONNECTED');
+      return true;
+
     } catch (e) {
+      console.error('Zoom SDK init error:', e);
       this.sdkStatus = 'FAILED';
       this.log('SDK INIT FAILED');
+      return false;
     }
   }
 
-async checkRunningContext() {
-  const ctx: any = await zoomSdk.getRunningContext();
-  const runningContext = ctx.runningContext || ctx.context;
-  this.log(`Running Context: ${runningContext}`);
-}
-
+  async checkRunningContext() {
+    try {
+      const ctx: any = await zoomSdk.getRunningContext();
+      const runningContext = ctx.runningContext || ctx.context || 'unknown';
+      this.log(`Running Context: ${runningContext}`);
+    } catch {
+      this.log('Failed to get running context');
+    }
+  }
 
   /* ================= PARTICIPANT SYNC ================= */
 
@@ -98,17 +111,18 @@ async checkRunningContext() {
 
       // LEAVE detection
       this.participants.forEach(p => {
-        const stillInMeeting = res.participants.some(
+        const stillPresent = res.participants.some(
           (rp: any) => rp.participantUUID === p.participantUUID
         );
 
-        if (!stillInMeeting && !p.leaveTime) {
+        if (!stillPresent && !p.leaveTime) {
           p.leaveTime = now;
           this.log(`LEAVE: ${p.screenName}`);
         }
       });
 
-    } catch {
+    } catch (e) {
+      console.error(e);
       this.log('Participant sync FAILED');
     }
   }
