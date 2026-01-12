@@ -55,6 +55,8 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
           'setAudioState'
         ]
       });
+const user: any = await zoomSdk.getUserContext();
+this.log(`Role: ${user.role}`);
 
       this.sdkStatus = 'CONNECTED';
       this.log('Zoom SDK CONNECTED');
