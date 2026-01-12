@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
 import zoomSdk from '@zoom/appssdk';
 
 interface Participant {
@@ -21,10 +21,14 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   participants: Participant[] = [];
   logs: string[] = [];
 
-  // keep handler reference (IMPORTANT)
+  constructor(private zone: NgZone) {}
+
+  // 🔴 IMPORTANT: handler reference
   private participantChangeHandler = async () => {
-    this.log('Participant change detected');
-    await this.syncParticipants();   // 🔑 realtime refresh
+    this.zone.run(() => {
+      this.log('Participant change detected');
+    });
+    await this.syncParticipants();
   };
 
   /* ================= LIFECYCLE ================= */
@@ -33,10 +37,10 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
     this.log('App Loaded');
 
     const ok = await this.initSdk();
-    if (!ok) return; // ⛔ stop if SDK failed
+    if (!ok) return;
 
-    await this.syncParticipants();       // initial load
-    this.registerParticipantListener();  // realtime
+    await this.syncParticipants();          // initial load
+    this.registerParticipantListener();     // realtime updates
   }
 
   ngOnDestroy() {
@@ -62,7 +66,7 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
       return true;
 
     } catch (e) {
-      console.error(e);
+      console.error('Zoom SDK init error:', e);
       this.sdkStatus = 'FAILED';
       this.log('SDK INIT FAILED');
       return false;
@@ -76,32 +80,37 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
       const now = new Date().toISOString();
       const res = await zoomSdk.getMeetingParticipants();
 
-      // JOIN detection
-      res.participants.forEach((p: any) => {
-        const exists = this.participants.find(
-          x => x.participantUUID === p.participantUUID
-        );
+      // 🔴 NgZone is MUST for UI update
+      this.zone.run(() => {
 
-        if (!exists) {
-          this.participants.push({
-            participantUUID: p.participantUUID,
-            screenName: p.screenName,
-            joinTime: now
-          });
-          this.log(`JOIN: ${p.screenName}`);
-        }
-      });
+        // JOIN detection
+        res.participants.forEach((p: any) => {
+          const exists = this.participants.find(
+            x => x.participantUUID === p.participantUUID
+          );
 
-      // LEAVE detection
-      this.participants.forEach(p => {
-        const stillHere = res.participants.some(
-          (rp: any) => rp.participantUUID === p.participantUUID
-        );
+          if (!exists) {
+            this.participants.push({
+              participantUUID: p.participantUUID,
+              screenName: p.screenName,
+              joinTime: now
+            });
+            this.log(`JOIN: ${p.screenName}`);
+          }
+        });
 
-        if (!stillHere && !p.leaveTime) {
-          p.leaveTime = now;
-          this.log(`LEAVE: ${p.screenName}`);
-        }
+        // LEAVE detection
+        this.participants.forEach(p => {
+          const stillHere = res.participants.some(
+            (rp: any) => rp.participantUUID === p.participantUUID
+          );
+
+          if (!stillHere && !p.leaveTime) {
+            p.leaveTime = now;
+            this.log(`LEAVE: ${p.screenName}`);
+          }
+        });
+
       });
 
     } catch (e) {
@@ -119,8 +128,10 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   async mute() {
     try {
       await zoomSdk.setAudioState({ audio: false });
-      this.isMuted = true;
-      this.log('Muted self');
+      this.zone.run(() => {
+        this.isMuted = true;
+        this.log('Muted self');
+      });
     } catch {
       this.log('Mute FAILED');
     }
@@ -129,8 +140,10 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   async unmute() {
     try {
       await zoomSdk.setAudioState({ audio: true });
-      this.isMuted = false;
-      this.log('Unmuted self');
+      this.zone.run(() => {
+        this.isMuted = false;
+        this.log('Unmuted self');
+      });
     } catch {
       this.log('Unmute FAILED');
     }
