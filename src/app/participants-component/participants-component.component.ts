@@ -77,7 +77,8 @@ this.startSpeakingTracker();
         capabilities: [
           'getMeetingParticipants',
           'onParticipantChange',
-          'setAudioState'
+          'setAudioState',
+          'getRunningContext'
         ]
       });
 
@@ -176,44 +177,66 @@ this.startSpeakingTracker();
     this.logs.unshift(`[${time}] ${msg}`);
   }
 
-
 startSpeakingTracker() {
+  this.log('Speaking tracker STARTED');
+
   this.speakingPoller = setInterval(async () => {
     try {
       const res = await zoomSdk.getMeetingParticipants();
       const now = Date.now();
 
       this.zone.run(() => {
+
+        /* ================== LOOP 1 ==================
+           Detect START / STOP speaking
+        ================================================= */
         res.participants.forEach((rp: any) => {
+
+          this.log(
+            `SPEAK CHECK → ${rp.screenName} | isSpeaking=${rp.isSpeaking}`
+          );
+
           const local = this.participants.find(
             p => p.participantUUID === rp.participantUUID
           );
-
           if (!local) return;
 
-          // initialize
           local.speakingTimeMs ??= 0;
 
-          // speaking START
+          // 🎤 START speaking
           if (rp.isSpeaking && !local.speakingStartTs) {
             local.speakingStartTs = now;
+            this.log(`🎤 START SPEAKING: ${rp.screenName}`);
           }
 
-          // speaking STOP
+          // 🛑 STOP speaking
           if (!rp.isSpeaking && local.speakingStartTs) {
             local.speakingTimeMs += now - local.speakingStartTs;
             local.speakingStartTs = undefined;
+            this.log(`🛑 STOP SPEAKING: ${rp.screenName}`);
           }
         });
 
+        /* ================== LOOP 2 (FIX-3) ==================
+           ⏱ Add time while STILL speaking
+        ====================================================== */
+        this.participants.forEach(p => {
+          if (p.speakingStartTs) {
+            p.speakingTimeMs! += this.SPEAKING_POLL_INTERVAL;
+          }
+        });
+
+        /* ================== CALCULATE % ================== */
         this.calculateParticipationPercentage();
       });
 
     } catch (e) {
-      this.log('Speaking tracker error');
+      this.log('Speaking tracker ERROR');
     }
   }, this.SPEAKING_POLL_INTERVAL);
 }
+
+
 calculateParticipationPercentage() {
   const totalSpeakingTime = this.participants.reduce(
     (sum, p) => sum + (p.speakingTimeMs || 0),
