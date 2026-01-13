@@ -6,6 +6,11 @@ interface Participant {
   screenName: string;
   joinTime?: string;
   leaveTime?: string;
+
+speakingTimeMs?: number;
+  speakingStartTs?: number;
+  participationPercent?: number;
+
 }
 
 @Component({
@@ -14,6 +19,10 @@ interface Participant {
   styleUrls: ['./participants-component.component.css']
 })
 export class ParticipantsComponentComponent implements OnInit, OnDestroy {
+
+
+  private speakingPoller: any;
+private SPEAKING_POLL_INTERVAL = 1000; // 1 second
 
   sdkStatus = 'NOT CONNECTED';
   isMuted = false;
@@ -34,6 +43,13 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
+await this.syncParticipants();
+this.registerParticipantListener();
+
+// 🔥 START speaking tracking
+this.startSpeakingTracker();
+
+
     this.log('App Loaded');
 
     const ok = await this.initSdk();
@@ -45,6 +61,10 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     zoomSdk.off('onParticipantChange', this.participantChangeHandler);
+    if (this.speakingPoller) {
+  clearInterval(this.speakingPoller);
+}
+
   }
 
   /* ================= SDK INIT ================= */
@@ -155,4 +175,58 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
     const time = new Date().toLocaleTimeString();
     this.logs.unshift(`[${time}] ${msg}`);
   }
+
+
+startSpeakingTracker() {
+  this.speakingPoller = setInterval(async () => {
+    try {
+      const res = await zoomSdk.getMeetingParticipants();
+      const now = Date.now();
+
+      this.zone.run(() => {
+        res.participants.forEach((rp: any) => {
+          const local = this.participants.find(
+            p => p.participantUUID === rp.participantUUID
+          );
+
+          if (!local) return;
+
+          // initialize
+          local.speakingTimeMs ??= 0;
+
+          // speaking START
+          if (rp.isSpeaking && !local.speakingStartTs) {
+            local.speakingStartTs = now;
+          }
+
+          // speaking STOP
+          if (!rp.isSpeaking && local.speakingStartTs) {
+            local.speakingTimeMs += now - local.speakingStartTs;
+            local.speakingStartTs = undefined;
+          }
+        });
+
+        this.calculateParticipationPercentage();
+      });
+
+    } catch (e) {
+      this.log('Speaking tracker error');
+    }
+  }, this.SPEAKING_POLL_INTERVAL);
+}
+calculateParticipationPercentage() {
+  const totalSpeakingTime = this.participants.reduce(
+    (sum, p) => sum + (p.speakingTimeMs || 0),
+    0
+  );
+
+  this.participants.forEach(p => {
+    p.participationPercent = totalSpeakingTime
+      ? +( (p.speakingTimeMs! / totalSpeakingTime) * 100 ).toFixed(2)
+      : 0;
+  });
+}
+
+
+
 }

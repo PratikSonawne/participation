@@ -10,13 +10,19 @@
     <th>Name</th>
     <th>Join Time</th>
     <th>Leave Time</th>
+    <th>Speaking (sec)</th>
+    <th>Participation %</th>
   </tr>
+
   <tr *ngFor="let p of participants">
     <td>{{ p.screenName }}</td>
     <td>{{ p.joinTime || '-' }}</td>
     <td>{{ p.leaveTime || '-' }}</td>
+    <td>{{ (p.speakingTimeMs || 0) / 1000 | number:'1.0-1' }}</td>
+    <td>{{ p.participationPercent || 0 }}%</td>
   </tr>
 </table>
+
 
 <p *ngIf="participants.length === 0">No participants</p>
 
