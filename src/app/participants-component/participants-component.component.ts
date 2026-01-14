@@ -17,15 +17,15 @@ interface Participant {
 export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   sdkStatus = 'NOT CONNECTED';
-  isMuted = false;
-
   participants: Participant[] = [];
   logs: string[] = [];
 
   meetingId = '';
+  pollIntervalId: any;
 
+  // 🔴 DUMMY / REAL API (must be reachable)
   private apiUrl =
-    'https://nuke-dealtime-equal-ultimately.trycloudflare.com/api/test/meetings';
+    'https://nuke-dealtime-equal-ultimately.trycloudflare.com/api/test';
 
   constructor(
     private zone: NgZone,
@@ -41,11 +41,14 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
     await this.loadMeetingId();
     await this.initialSync();
+
     this.registerParticipantListener();
+    this.startPolling(); // 🔥 MOST IMPORTANT
   }
 
   ngOnDestroy() {
     zoomSdk.off('onParticipantChange', this.onParticipantChange);
+    clearInterval(this.pollIntervalId);
   }
 
   /* ================= SDK INIT ================= */
@@ -54,40 +57,36 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
     try {
       await zoomSdk.config({
         capabilities: [
+          'getMeetingContext',
           'getMeetingParticipants',
-          'getRunningContext',
-          'setAudioState',
-           'getMeetingContext'
+          'setAudioState'
         ]
       });
 
       this.sdkStatus = 'CONNECTED';
       this.log('Zoom SDK connected');
       return true;
-
     } catch (e) {
       console.error(e);
-      this.sdkStatus = 'FAILED';
-      this.log('SDK init failed');
+      this.log('Zoom SDK init failed');
       return false;
     }
   }
 
   /* ================= MEETING ID ================= */
 
-async loadMeetingId() {
-  try {
-    const ctx = await zoomSdk.getMeetingContext();
-    this.meetingId = ctx.meetingID;
-    this.log(`Meeting ID: ${this.meetingId}`);
-  } catch {
-    this.log('Meeting ID not accessible (not host)');
-    this.meetingId = 'UNKNOWN';
+  async loadMeetingId() {
+    try {
+      const ctx = await zoomSdk.getMeetingContext();
+      this.meetingId = ctx.meetingID;
+      this.log(`Meeting ID: ${this.meetingId}`);
+    } catch (e) {
+      this.meetingId = 'UNKNOWN';
+      this.log('Meeting ID not accessible (not host/co-host)');
+    }
   }
-}
 
-
-  /* ================= INITIAL SYNC ================= */
+  /* ================= INITIAL LOAD ================= */
 
   async initialSync() {
     const res = await zoomSdk.getMeetingParticipants();
@@ -100,95 +99,118 @@ async loadMeetingId() {
         joinTime: now
       }));
     });
+
+    this.log(`Initial participants loaded: ${this.participants.length}`);
   }
 
-  /* ================= PARTICIPANT EVENTS ================= */
+  /* ================= PARTICIPANT EVENT ================= */
 
   private onParticipantChange = async () => {
-    const res = await zoomSdk.getMeetingParticipants();
-    const now = new Date().toISOString();
-
-    const latestIds = res.participants.map((p: any) => p.participantUUID);
-
-    // 🔹 JOIN
-    res.participants.forEach((rp: any) => {
-      const exists = this.participants.some(
-        p => p.participantUUID === rp.participantUUID
-      );
-
-      if (!exists) {
-        const participant: Participant = {
-          participantUUID: rp.participantUUID,
-          screenName: rp.screenName,
-          joinTime: now
-        };
-
-        // UI update first
-        this.zone.run(() => {
-          this.participants = [...this.participants, participant];
-          this.log(`JOIN: ${participant.screenName}`);
-        });
-
-        // Backend async (non-blocking)
-        this.sendToBackend(participant);
-      }
-    });
-
-    // 🔹 LEAVE
-    this.participants.forEach(p => {
-      if (!latestIds.includes(p.participantUUID) && !p.leaveTime) {
-        const updated: Participant = {
-          ...p,
-          leaveTime: now
-        };
-
-        this.zone.run(() => {
-          this.participants = this.participants.map(x =>
-            x.participantUUID === p.participantUUID ? updated : x
-          );
-          this.log(`LEAVE: ${p.screenName}`);
-        });
-
-        this.sendToBackend(updated);
-      }
-    });
+    this.log('onParticipantChange event fired');
+    await this.syncParticipants('EVENT');
   };
 
   registerParticipantListener() {
     zoomSdk.on('onParticipantChange', this.onParticipantChange);
   }
 
-  /* ================= BACKEND SYNC ================= */
+  /* ================= POLLING (LEAVE FIX) ================= */
 
-  private sendToBackend(participant: Participant) {
-    if (!this.meetingId) return;
+  startPolling() {
+    this.pollIntervalId = setInterval(() => {
+      this.syncParticipants('POLL');
+    }, 3000);
 
-    // run outside Angular zone → no UI blocking
+    this.log('Polling started (every 3 sec)');
+  }
+
+  /* ================= CORE SYNC LOGIC ================= */
+
+  async syncParticipants(source: 'EVENT' | 'POLL') {
+    try {
+      const res = await zoomSdk.getMeetingParticipants();
+      const now = new Date().toISOString();
+
+      const latestIds = res.participants.map((p: any) => p.participantUUID);
+
+      // 🔹 JOIN
+      res.participants.forEach((rp: any) => {
+        const exists = this.participants.some(
+          p => p.participantUUID === rp.participantUUID
+        );
+
+        if (!exists) {
+          const participant: Participant = {
+            participantUUID: rp.participantUUID,
+            screenName: rp.screenName,
+            joinTime: now
+          };
+
+          this.zone.run(() => {
+            this.participants = [...this.participants, participant];
+            this.log(`JOIN (${source}): ${participant.screenName}`);
+          });
+
+          this.callApi('JOIN', participant);
+        }
+      });
+
+      // 🔹 LEAVE (🔥 FIXED)
+      this.participants.forEach(p => {
+        if (!latestIds.includes(p.participantUUID) && !p.leaveTime) {
+          const updated: Participant = {
+            ...p,
+            leaveTime: now
+          };
+
+          this.zone.run(() => {
+            this.participants = this.participants.map(x =>
+              x.participantUUID === p.participantUUID ? updated : x
+            );
+            this.log(`LEAVE (${source}): ${p.screenName}`);
+          });
+
+          this.callApi('LEAVE', updated);
+        }
+      });
+
+    } catch (e) {
+      console.error(e);
+      this.log('syncParticipants failed');
+    }
+  }
+
+  /* ================= API (FORCED CALL + LOGS) ================= */
+
+  private callApi(action: 'JOIN' | 'LEAVE', participant: Participant) {
+    const payload = {
+      action,
+      meetingId: this.meetingId,
+      participant,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('🚀 API CALL →', payload);
+    this.log(`API CALL (${action}) → ${participant.screenName}`);
+
     this.zone.runOutsideAngular(() => {
       this.http
-        .post(
-          `${this.apiUrl}/${this.meetingId}/participants`,
-          participant
-        )
+        .post(`${this.apiUrl}/participants`, payload)
         .subscribe({
-          error: () =>
+          next: () => {
+            console.log('✅ API SUCCESS');
             this.zone.run(() =>
-              this.log(`Backend error: ${participant.screenName}`)
-            )
+              this.log(`API SUCCESS → ${participant.screenName}`)
+            );
+          },
+          error: err => {
+            console.error('❌ API ERROR', err);
+            this.zone.run(() =>
+              this.log(`API ERROR → ${participant.screenName}`)
+            );
+          }
         });
     });
-  }
-
-  /* ================= AUDIO ================= */
-
-  async mute() {
-    await zoomSdk.setAudioState({ audio: false });
-    this.zone.run(() => (this.isMuted = true));
-  }
-
-  async unmute() {
-    await zoomSdk.setAudioState({ audio: true });
-    this.zone.run(() => (this.isMuted = false));
   }
 
   /* ================= LOG ================= */
