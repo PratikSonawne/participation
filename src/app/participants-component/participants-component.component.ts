@@ -1,16 +1,12 @@
 import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
 import zoomSdk from '@zoom/appssdk';
+import { HttpClient } from '@angular/common/http';
 
 interface Participant {
   participantUUID: string;
   screenName: string;
   joinTime?: string;
   leaveTime?: string;
-
-speakingTimeMs?: number;
-  speakingStartTs?: number;
-  participationPercent?: number;
-
 }
 
 @Component({
@@ -20,51 +16,43 @@ speakingTimeMs?: number;
 })
 export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
-
-  private speakingPoller: any;
-private SPEAKING_POLL_INTERVAL = 1000; // 1 second
-
   sdkStatus = 'NOT CONNECTED';
   isMuted = false;
 
   participants: Participant[] = [];
   logs: string[] = [];
 
-  constructor(private zone: NgZone) {}
+  meetingId!: string;
 
-  // 🔴 IMPORTANT: handler reference
+  private apiUrl = 'https://nuke-dealtime-equal-ultimately.trycloudflare.com/api/test/meetings';
+
+  constructor(
+    private zone: NgZone,
+    private http: HttpClient
+  ) {}
+
+  /* ================= PARTICIPANT EVENT ================= */
+
   private participantChangeHandler = async () => {
-    this.zone.run(() => {
-      this.log('Participant change detected');
-    });
+    this.zone.run(() => this.log('Participant change detected'));
     await this.syncParticipants();
   };
 
   /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
-await this.syncParticipants();
-this.registerParticipantListener();
-
-// 🔥 START speaking tracking
-this.startSpeakingTracker();
-
-
     this.log('App Loaded');
 
     const ok = await this.initSdk();
     if (!ok) return;
 
-    await this.syncParticipants();          // initial load
-    this.registerParticipantListener();     // realtime updates
+    await this.loadMeetingContext();   // 🔹 GET MEETING ID
+    await this.syncParticipants();
+    this.registerParticipantListener();
   }
 
   ngOnDestroy() {
     zoomSdk.off('onParticipantChange', this.participantChangeHandler);
-    if (this.speakingPoller) {
-  clearInterval(this.speakingPoller);
-}
-
   }
 
   /* ================= SDK INIT ================= */
@@ -76,9 +64,8 @@ this.startSpeakingTracker();
       await zoomSdk.config({
         capabilities: [
           'getMeetingParticipants',
-          'onParticipantChange',
-          'setAudioState',
-          'getRunningContext'
+          'getRunningContext',
+          'setAudioState'
         ]
       });
 
@@ -87,12 +74,36 @@ this.startSpeakingTracker();
       return true;
 
     } catch (e) {
-      console.error('Zoom SDK init error:', e);
+      console.error(e);
       this.sdkStatus = 'FAILED';
       this.log('SDK INIT FAILED');
       return false;
     }
   }
+
+  /* ================= MEETING CONTEXT ================= */
+
+  async loadMeetingContext() {
+  try {
+    const context = await zoomSdk.getRunningContext();
+
+    // 🔧 Zoom SDK typing FIX
+    const meetingContext = (context as any).meeting;
+
+    if (meetingContext?.meetingId) {
+      this.meetingId = meetingContext.meetingId;
+      this.log(`Meeting ID: ${this.meetingId}`);
+    } else {
+      this.log('Meeting context not available');
+    }
+
+  } catch (e) {
+    console.error(e);
+    this.log('Failed to get meeting context');
+  }
+}
+
+
 
   /* ================= PARTICIPANT SYNC ================= */
 
@@ -101,26 +112,29 @@ this.startSpeakingTracker();
       const now = new Date().toISOString();
       const res = await zoomSdk.getMeetingParticipants();
 
-      // 🔴 NgZone is MUST for UI update
       this.zone.run(() => {
 
-        // JOIN detection
-        res.participants.forEach((p: any) => {
+        // JOIN
+        res.participants.forEach((rp: any) => {
           const exists = this.participants.find(
-            x => x.participantUUID === p.participantUUID
+            p => p.participantUUID === rp.participantUUID
           );
 
           if (!exists) {
-            this.participants.push({
-              participantUUID: p.participantUUID,
-              screenName: p.screenName,
+            const participant: Participant = {
+              participantUUID: rp.participantUUID,
+              screenName: rp.screenName,
               joinTime: now
-            });
-            this.log(`JOIN: ${p.screenName}`);
+            };
+
+            this.participants.push(participant);
+            this.log(`JOIN: ${rp.screenName}`);
+
+            this.saveParticipantToBackend(participant);
           }
         });
 
-        // LEAVE detection
+        // LEAVE
         this.participants.forEach(p => {
           const stillHere = res.participants.some(
             (rp: any) => rp.participantUUID === p.participantUUID
@@ -129,6 +143,8 @@ this.startSpeakingTracker();
           if (!stillHere && !p.leaveTime) {
             p.leaveTime = now;
             this.log(`LEAVE: ${p.screenName}`);
+
+            this.saveParticipantToBackend(p);
           }
         });
 
@@ -142,6 +158,20 @@ this.startSpeakingTracker();
 
   registerParticipantListener() {
     zoomSdk.on('onParticipantChange', this.participantChangeHandler);
+  }
+
+  /* ================= BACKEND API ================= */
+
+  saveParticipantToBackend(participant: Participant) {
+    if (!this.meetingId) return;
+
+    this.http.post(
+      `${this.apiUrl}/${this.meetingId}/participants`,
+      participant
+    ).subscribe({
+      next: () => this.log(`Saved: ${participant.screenName}`),
+      error: () => this.log(`Backend save FAILED: ${participant.screenName}`)
+    });
   }
 
   /* ================= AUDIO CONTROL ================= */
@@ -170,86 +200,10 @@ this.startSpeakingTracker();
     }
   }
 
-  /* ================= UI LOGS ================= */
+  /* ================= LOGS ================= */
 
   log(msg: string) {
     const time = new Date().toLocaleTimeString();
     this.logs.unshift(`[${time}] ${msg}`);
   }
-
-startSpeakingTracker() {
-  this.log('Speaking tracker STARTED');
-
-  this.speakingPoller = setInterval(async () => {
-    try {
-      const res = await zoomSdk.getMeetingParticipants();
-      const now = Date.now();
-
-      this.zone.run(() => {
-
-        /* ================== LOOP 1 ==================
-           Detect START / STOP speaking
-        ================================================= */
-        res.participants.forEach((rp: any) => {
-
-          this.log(
-            `SPEAK CHECK → ${rp.screenName} | isSpeaking=${rp.isSpeaking}`
-          );
-
-          const local = this.participants.find(
-            p => p.participantUUID === rp.participantUUID
-          );
-          if (!local) return;
-
-          local.speakingTimeMs ??= 0;
-
-          // 🎤 START speaking
-          if (rp.isSpeaking && !local.speakingStartTs) {
-            local.speakingStartTs = now;
-            this.log(`🎤 START SPEAKING: ${rp.screenName}`);
-          }
-
-          // 🛑 STOP speaking
-          if (!rp.isSpeaking && local.speakingStartTs) {
-            local.speakingTimeMs += now - local.speakingStartTs;
-            local.speakingStartTs = undefined;
-            this.log(`🛑 STOP SPEAKING: ${rp.screenName}`);
-          }
-        });
-
-        /* ================== LOOP 2 (FIX-3) ==================
-           ⏱ Add time while STILL speaking
-        ====================================================== */
-        this.participants.forEach(p => {
-          if (p.speakingStartTs) {
-            p.speakingTimeMs! += this.SPEAKING_POLL_INTERVAL;
-          }
-        });
-
-        /* ================== CALCULATE % ================== */
-        this.calculateParticipationPercentage();
-      });
-
-    } catch (e) {
-      this.log('Speaking tracker ERROR');
-    }
-  }, this.SPEAKING_POLL_INTERVAL);
-}
-
-
-calculateParticipationPercentage() {
-  const totalSpeakingTime = this.participants.reduce(
-    (sum, p) => sum + (p.speakingTimeMs || 0),
-    0
-  );
-
-  this.participants.forEach(p => {
-    p.participationPercent = totalSpeakingTime
-      ? +( (p.speakingTimeMs! / totalSpeakingTime) * 100 ).toFixed(2)
-      : 0;
-  });
-}
-
-
-
 }
