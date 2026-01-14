@@ -22,45 +22,36 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   participants: Participant[] = [];
   logs: string[] = [];
 
-  meetingId!: string;
+  meetingId = '';
 
-  private apiUrl = 'https://nuke-dealtime-equal-ultimately.trycloudflare.com/api/test/meetings';
+  private apiUrl =
+    'https://nuke-dealtime-equal-ultimately.trycloudflare.com/api/test/meetings';
 
   constructor(
     private zone: NgZone,
     private http: HttpClient
   ) {}
 
-  /* ================= PARTICIPANT EVENT ================= */
-
-  private participantChangeHandler = async () => {
-    this.zone.run(() => this.log('Participant change detected'));
-    await this.syncParticipants();
-  };
-
   /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
-    this.log('App Loaded');
+    this.log('App loaded');
 
-    const ok = await this.initSdk();
-    if (!ok) return;
+    if (!(await this.initSdk())) return;
 
-    await this.loadMeetingContext();   // 🔹 GET MEETING ID
-    await this.syncParticipants();
+    await this.loadMeetingId();
+    await this.initialSync();
     this.registerParticipantListener();
   }
 
   ngOnDestroy() {
-    zoomSdk.off('onParticipantChange', this.participantChangeHandler);
+    zoomSdk.off('onParticipantChange', this.onParticipantChange);
   }
 
   /* ================= SDK INIT ================= */
 
   async initSdk(): Promise<boolean> {
     try {
-      this.log('Initializing Zoom SDK...');
-
       await zoomSdk.config({
         capabilities: [
           'getMeetingParticipants',
@@ -70,137 +61,137 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
       });
 
       this.sdkStatus = 'CONNECTED';
-      this.log('Zoom SDK CONNECTED');
+      this.log('Zoom SDK connected');
       return true;
 
     } catch (e) {
       console.error(e);
       this.sdkStatus = 'FAILED';
-      this.log('SDK INIT FAILED');
+      this.log('SDK init failed');
       return false;
     }
   }
 
-  /* ================= MEETING CONTEXT ================= */
+  /* ================= MEETING ID ================= */
 
-  async loadMeetingContext() {
-  try {
+  async loadMeetingId() {
     const context = await zoomSdk.getRunningContext();
+    const meeting = (context as any)?.meeting;
 
-    // 🔧 Zoom SDK typing FIX
-    const meetingContext = (context as any).meeting;
-
-    if (meetingContext?.meetingId) {
-      this.meetingId = meetingContext.meetingId;
-      this.log(`Meeting ID: ${this.meetingId}`);
-    } else {
-      this.log('Meeting context not available');
+    if (!meeting?.meetingId) {
+      this.log('Meeting ID not available');
+      return;
     }
 
-  } catch (e) {
-    console.error(e);
-    this.log('Failed to get meeting context');
-  }
-}
-
-
-
-  /* ================= PARTICIPANT SYNC ================= */
-
-  async syncParticipants() {
-    try {
-      const now = new Date().toISOString();
-      const res = await zoomSdk.getMeetingParticipants();
-
-      this.zone.run(() => {
-
-        // JOIN
-        res.participants.forEach((rp: any) => {
-          const exists = this.participants.find(
-            p => p.participantUUID === rp.participantUUID
-          );
-
-          if (!exists) {
-            const participant: Participant = {
-              participantUUID: rp.participantUUID,
-              screenName: rp.screenName,
-              joinTime: now
-            };
-
-            this.participants.push(participant);
-            this.log(`JOIN: ${rp.screenName}`);
-
-            this.saveParticipantToBackend(participant);
-          }
-        });
-
-        // LEAVE
-        this.participants.forEach(p => {
-          const stillHere = res.participants.some(
-            (rp: any) => rp.participantUUID === p.participantUUID
-          );
-
-          if (!stillHere && !p.leaveTime) {
-            p.leaveTime = now;
-            this.log(`LEAVE: ${p.screenName}`);
-
-            this.saveParticipantToBackend(p);
-          }
-        });
-
-      });
-
-    } catch (e) {
-      console.error(e);
-      this.log('Participant sync FAILED');
-    }
+    this.meetingId = meeting.meetingId;
+    this.log(`Meeting ID: ${this.meetingId}`);
   }
 
-  registerParticipantListener() {
-    zoomSdk.on('onParticipantChange', this.participantChangeHandler);
-  }
+  /* ================= INITIAL SYNC ================= */
 
-  /* ================= BACKEND API ================= */
+  async initialSync() {
+    const res = await zoomSdk.getMeetingParticipants();
+    const now = new Date().toISOString();
 
-  saveParticipantToBackend(participant: Participant) {
-    if (!this.meetingId) return;
-
-    this.http.post(
-      `${this.apiUrl}/${this.meetingId}/participants`,
-      participant
-    ).subscribe({
-      next: () => this.log(`Saved: ${participant.screenName}`),
-      error: () => this.log(`Backend save FAILED: ${participant.screenName}`)
+    this.zone.run(() => {
+      this.participants = res.participants.map((p: any) => ({
+        participantUUID: p.participantUUID,
+        screenName: p.screenName,
+        joinTime: now
+      }));
     });
   }
 
-  /* ================= AUDIO CONTROL ================= */
+  /* ================= PARTICIPANT EVENTS ================= */
+
+  private onParticipantChange = async () => {
+    const res = await zoomSdk.getMeetingParticipants();
+    const now = new Date().toISOString();
+
+    const latestIds = res.participants.map((p: any) => p.participantUUID);
+
+    // 🔹 JOIN
+    res.participants.forEach((rp: any) => {
+      const exists = this.participants.some(
+        p => p.participantUUID === rp.participantUUID
+      );
+
+      if (!exists) {
+        const participant: Participant = {
+          participantUUID: rp.participantUUID,
+          screenName: rp.screenName,
+          joinTime: now
+        };
+
+        // UI update first
+        this.zone.run(() => {
+          this.participants = [...this.participants, participant];
+          this.log(`JOIN: ${participant.screenName}`);
+        });
+
+        // Backend async (non-blocking)
+        this.sendToBackend(participant);
+      }
+    });
+
+    // 🔹 LEAVE
+    this.participants.forEach(p => {
+      if (!latestIds.includes(p.participantUUID) && !p.leaveTime) {
+        const updated: Participant = {
+          ...p,
+          leaveTime: now
+        };
+
+        this.zone.run(() => {
+          this.participants = this.participants.map(x =>
+            x.participantUUID === p.participantUUID ? updated : x
+          );
+          this.log(`LEAVE: ${p.screenName}`);
+        });
+
+        this.sendToBackend(updated);
+      }
+    });
+  };
+
+  registerParticipantListener() {
+    zoomSdk.on('onParticipantChange', this.onParticipantChange);
+  }
+
+  /* ================= BACKEND SYNC ================= */
+
+  private sendToBackend(participant: Participant) {
+    if (!this.meetingId) return;
+
+    // run outside Angular zone → no UI blocking
+    this.zone.runOutsideAngular(() => {
+      this.http
+        .post(
+          `${this.apiUrl}/${this.meetingId}/participants`,
+          participant
+        )
+        .subscribe({
+          error: () =>
+            this.zone.run(() =>
+              this.log(`Backend error: ${participant.screenName}`)
+            )
+        });
+    });
+  }
+
+  /* ================= AUDIO ================= */
 
   async mute() {
-    try {
-      await zoomSdk.setAudioState({ audio: false });
-      this.zone.run(() => {
-        this.isMuted = true;
-        this.log('Muted self');
-      });
-    } catch {
-      this.log('Mute FAILED');
-    }
+    await zoomSdk.setAudioState({ audio: false });
+    this.zone.run(() => (this.isMuted = true));
   }
 
   async unmute() {
-    try {
-      await zoomSdk.setAudioState({ audio: true });
-      this.zone.run(() => {
-        this.isMuted = false;
-        this.log('Unmuted self');
-      });
-    } catch {
-      this.log('Unmute FAILED');
-    }
+    await zoomSdk.setAudioState({ audio: true });
+    this.zone.run(() => (this.isMuted = false));
   }
 
-  /* ================= LOGS ================= */
+  /* ================= LOG ================= */
 
   log(msg: string) {
     const time = new Date().toLocaleTimeString();
