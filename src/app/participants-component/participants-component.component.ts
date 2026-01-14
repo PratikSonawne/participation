@@ -56,7 +56,8 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
         capabilities: [
           'getMeetingParticipants',
           'getRunningContext',
-          'setAudioState'
+          'setAudioState',
+           'getMeetingContext'
         ]
       });
 
@@ -74,18 +75,17 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   /* ================= MEETING ID ================= */
 
-  async loadMeetingId() {
-    const context = await zoomSdk.getRunningContext();
-    const meeting = (context as any)?.meeting;
-
-    if (!meeting?.meetingId) {
-      this.log('Meeting ID not available');
-      return;
-    }
-
-    this.meetingId = meeting.meetingId;
+async loadMeetingId() {
+  try {
+    const ctx = await zoomSdk.getMeetingContext();
+    this.meetingId = ctx.meetingID;
     this.log(`Meeting ID: ${this.meetingId}`);
+  } catch {
+    this.log('Meeting ID not accessible (not host)');
+    this.meetingId = 'UNKNOWN';
   }
+}
+
 
   /* ================= INITIAL SYNC ================= */
 
