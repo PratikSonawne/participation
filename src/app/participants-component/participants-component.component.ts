@@ -1,6 +1,5 @@
 import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
 import zoomSdk from '@zoom/appssdk';
-import { HttpClient } from '@angular/common/http';
 
 interface Participant {
   participantUUID: string;
@@ -17,200 +16,168 @@ interface Participant {
 export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   sdkStatus = 'NOT CONNECTED';
+  isMuted = false;
+
   participants: Participant[] = [];
   logs: string[] = [];
 
-  meetingId = '';
-  pollIntervalId: any;
+  // 🔴 NEW: Meeting UUID
+  meetingUUID = '';
 
-  // 🔴 DUMMY / REAL API (must be reachable)
-  private apiUrl =
-    'https://nuke-dealtime-equal-ultimately.trycloudflare.com/api/test';
+  constructor(private zone: NgZone) {}
 
-  constructor(
-    private zone: NgZone,
-    private http: HttpClient
-  ) {}
+  /* ================= PARTICIPANT EVENT ================= */
+
+  private participantChangeHandler = async () => {
+    this.zone.run(() => {
+      this.log('EVENT: onParticipantChange fired');
+    });
+    await this.syncParticipants('EVENT');
+  };
 
   /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
-    this.log('App loaded');
+    this.log('App Loaded');
 
-    if (!(await this.initSdk())) return;
+    const ok = await this.initSdk();
+    if (!ok) return;
 
-    await this.loadMeetingId();
-    await this.initialSync();
+    // 🔴 NEW: Load meeting UUID
+    await this.loadMeetingUUID();
 
+    await this.syncParticipants('INIT');
     this.registerParticipantListener();
-    this.startPolling(); // 🔥 MOST IMPORTANT
   }
 
   ngOnDestroy() {
-    zoomSdk.off('onParticipantChange', this.onParticipantChange);
-    clearInterval(this.pollIntervalId);
+    zoomSdk.off('onParticipantChange', this.participantChangeHandler);
+    this.log('Participant listener removed');
   }
 
   /* ================= SDK INIT ================= */
 
   async initSdk(): Promise<boolean> {
     try {
+      this.log('Initializing Zoom SDK...');
+
       await zoomSdk.config({
         capabilities: [
-          'getMeetingContext',
+          'getMeetingUUID',          // 🔴 REQUIRED
           'getMeetingParticipants',
+          'onParticipantChange',
           'setAudioState'
         ]
       });
 
       this.sdkStatus = 'CONNECTED';
-      this.log('Zoom SDK connected');
+      this.log('Zoom SDK CONNECTED');
       return true;
+
     } catch (e) {
       console.error(e);
-      this.log('Zoom SDK init failed');
+      this.sdkStatus = 'FAILED';
+      this.log('SDK INIT FAILED');
       return false;
     }
   }
 
-  /* ================= MEETING ID ================= */
+  /* ================= MEETING UUID ================= */
 
-  async loadMeetingId() {
+  async loadMeetingUUID() {
     try {
-      const ctx = await zoomSdk.getMeetingContext();
-      this.meetingId = ctx.meetingID;
-      this.log(`Meeting ID: ${this.meetingId}`);
+      this.log('Fetching Meeting UUID...');
+
+      const res = await zoomSdk.getMeetingUUID();
+      this.meetingUUID = res.meetingUUID;
+
+      this.log(`Meeting UUID loaded: ${this.meetingUUID}`);
     } catch (e) {
-      this.meetingId = 'UNKNOWN';
-      this.log('Meeting ID not accessible (not host/co-host)');
+      console.error(e);
+      this.log('ERROR: Failed to get Meeting UUID');
     }
   }
 
-  /* ================= INITIAL LOAD ================= */
+  /* ================= PARTICIPANT SYNC ================= */
 
-  async initialSync() {
-    const res = await zoomSdk.getMeetingParticipants();
-    const now = new Date().toISOString();
-
-    this.zone.run(() => {
-      this.participants = res.participants.map((p: any) => ({
-        participantUUID: p.participantUUID,
-        screenName: p.screenName,
-        joinTime: now
-      }));
-    });
-
-    this.log(`Initial participants loaded: ${this.participants.length}`);
-  }
-
-  /* ================= PARTICIPANT EVENT ================= */
-
-  private onParticipantChange = async () => {
-    this.log('onParticipantChange event fired');
-    await this.syncParticipants('EVENT');
-  };
-
-  registerParticipantListener() {
-    zoomSdk.on('onParticipantChange', this.onParticipantChange);
-  }
-
-  /* ================= POLLING (LEAVE FIX) ================= */
-
-  startPolling() {
-    this.pollIntervalId = setInterval(() => {
-      this.syncParticipants('POLL');
-    }, 3000);
-
-    this.log('Polling started (every 3 sec)');
-  }
-
-  /* ================= CORE SYNC LOGIC ================= */
-
-  async syncParticipants(source: 'EVENT' | 'POLL') {
+  async syncParticipants(source: 'INIT' | 'EVENT') {
     try {
-      const res = await zoomSdk.getMeetingParticipants();
+      this.log(`syncParticipants called [${source}]`);
+
       const now = new Date().toISOString();
+      const res = await zoomSdk.getMeetingParticipants();
 
-      const latestIds = res.participants.map((p: any) => p.participantUUID);
+      this.log(`Zoom returned ${res.participants.length} participants`);
 
-      // 🔹 JOIN
-      res.participants.forEach((rp: any) => {
-        const exists = this.participants.some(
-          p => p.participantUUID === rp.participantUUID
-        );
+      this.zone.run(() => {
 
-        if (!exists) {
-          const participant: Participant = {
-            participantUUID: rp.participantUUID,
-            screenName: rp.screenName,
-            joinTime: now
-          };
+        // JOIN
+        res.participants.forEach((rp: any) => {
+          const exists = this.participants.some(
+            p => p.participantUUID === rp.participantUUID
+          );
 
-          this.zone.run(() => {
-            this.participants = [...this.participants, participant];
-            this.log(`JOIN (${source}): ${participant.screenName}`);
-          });
+          if (!exists) {
+            this.participants.push({
+              participantUUID: rp.participantUUID,
+              screenName: rp.screenName,
+              joinTime: now
+            });
+            this.log(`JOIN: ${rp.screenName}`);
+          }
+        });
 
-          this.callApi('JOIN', participant);
-        }
-      });
+        // LEAVE
+        this.participants.forEach(p => {
+          const stillHere = res.participants.some(
+            (rp: any) => rp.participantUUID === p.participantUUID
+          );
 
-      // 🔹 LEAVE (🔥 FIXED)
-      this.participants.forEach(p => {
-        if (!latestIds.includes(p.participantUUID) && !p.leaveTime) {
-          const updated: Participant = {
-            ...p,
-            leaveTime: now
-          };
+          if (!stillHere && !p.leaveTime) {
+            p.leaveTime = now;
+            this.log(`LEAVE: ${p.screenName}`);
+          }
+        });
 
-          this.zone.run(() => {
-            this.participants = this.participants.map(x =>
-              x.participantUUID === p.participantUUID ? updated : x
-            );
-            this.log(`LEAVE (${source}): ${p.screenName}`);
-          });
-
-          this.callApi('LEAVE', updated);
-        }
       });
 
     } catch (e) {
       console.error(e);
-      this.log('syncParticipants failed');
+      this.log('ERROR: Participant sync FAILED');
     }
   }
 
-  /* ================= API (FORCED CALL + LOGS) ================= */
+  registerParticipantListener() {
+    zoomSdk.on('onParticipantChange', this.participantChangeHandler);
+    this.log('Participant change listener registered');
+  }
 
-  private callApi(action: 'JOIN' | 'LEAVE', participant: Participant) {
-    const payload = {
-      action,
-      meetingId: this.meetingId,
-      participant,
-      timestamp: new Date().toISOString()
-    };
+  /* ================= AUDIO CONTROL ================= */
 
-    console.log('🚀 API CALL →', payload);
-    this.log(`API CALL (${action}) → ${participant.screenName}`);
+  async mute() {
+    this.log('Mute clicked');
+    try {
+      await zoomSdk.setAudioState({ audio: false });
+      this.zone.run(() => {
+        this.isMuted = true;
+        this.log('Muted self');
+      });
+    } catch {
+      this.log('Mute FAILED');
+    }
+  }
 
-    this.zone.runOutsideAngular(() => {
-      this.http
-        .post(`${this.apiUrl}/participants`, payload)
-        .subscribe({
-          next: () => {
-            console.log('✅ API SUCCESS');
-            this.zone.run(() =>
-              this.log(`API SUCCESS → ${participant.screenName}`)
-            );
-          },
-          error: err => {
-            console.error('❌ API ERROR', err);
-            this.zone.run(() =>
-              this.log(`API ERROR → ${participant.screenName}`)
-            );
-          }
-        });
-    });
+  async unmute() {
+    this.log('Unmute clicked');
+    try {
+      await zoomSdk.setAudioState({ audio: true });
+      this.zone.run(() => {
+        this.isMuted = false;
+        this.log('Unmuted self');
+      });
+    } catch {
+      this.log('Unmute FAILED');
+    }
   }
 
   /* ================= LOG ================= */
@@ -218,5 +185,6 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
   log(msg: string) {
     const time = new Date().toLocaleTimeString();
     this.logs.unshift(`[${time}] ${msg}`);
+    console.log(`[${time}] ${msg}`);
   }
 }

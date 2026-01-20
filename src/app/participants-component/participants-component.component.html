@@ -1,7 +1,7 @@
 <h3>SDK Status: {{ sdkStatus }}</h3>
 
-<!-- <button (click)="mute()">Mute</button>
-<button (click)="unmute()">Unmute</button> -->
+<button (click)="mute()">Mute</button>
+<button (click)="unmute()">Unmute</button>
 
 <h3>Participants ({{ participants.length }})</h3>
 
@@ -10,22 +10,16 @@
     <th>Name</th>
     <th>Join Time</th>
     <th>Leave Time</th>
-    <th>Speaking (sec)</th>
-    <th>Participation %</th>
   </tr>
-
   <tr *ngFor="let p of participants">
     <td>{{ p.screenName }}</td>
     <td>{{ p.joinTime || '-' }}</td>
     <td>{{ p.leaveTime || '-' }}</td>
-    <!-- <td>{{ (p.speakingTimeMs || 0) / 1000 | number:'1.0-1' }}</td>
-    <td>{{ p.participationPercent || 0 }}%</td> -->
   </tr>
 </table>
-
+<h3>Meeting UUID: {{ meetingUUID || 'Not Available' }}</h3>
 
 <p *ngIf="participants.length === 0">No participants</p>
 
 <h3>Debug Logs</h3>
 <div *ngFor="let log of logs">{{ log }}</div>
-
