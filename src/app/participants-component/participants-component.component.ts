@@ -42,6 +42,8 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
     const ok = await this.initSdk();
     if (!ok) return;
+await this.checkRunningContext();
+await this.loadMeetingUUID();
 
     // 🔴 NEW: Load meeting UUID
     await this.loadMeetingUUID();
@@ -179,6 +181,20 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
       this.log('Unmute FAILED');
     }
   }
+async checkRunningContext() {
+  try {
+    const ctx = await zoomSdk.getRunningContext();
+    this.log(`Running Context: ${JSON.stringify(ctx)}`);
+
+    if (ctx?.context !== 'inMeeting') {
+      this.log('⚠️ App is NOT running in meeting context');
+    } else {
+      this.log('✅ App running inside meeting context');
+    }
+  } catch (e) {
+    this.log('ERROR: Failed to get running context');
+  }
+}
 
   /* ================= LOG ================= */
 
