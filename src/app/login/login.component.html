@@ -1,0 +1,53 @@
+<div class="login-container">
+  <div class="login-card">
+
+    <!-- SCREEN 1: LOGIN -->
+    <div *ngIf="!loggedIn">
+      <h2>Login</h2>
+      <p>Sign in with Email or Google</p>
+
+      <input
+        type="email"
+        placeholder="Email"
+        [(ngModel)]="emailInput"
+      />
+
+      <input
+        type="password"
+        placeholder="Password"
+        [(ngModel)]="passwordInput"
+      />
+
+      <button (click)="loginWithEmail()">
+        Login with Email
+      </button>
+
+      <div class="divider">OR</div>
+
+      <button (click)="loginWithGoogle()">
+        Continue with Google
+      </button>
+    </div>
+
+    <!-- SCREEN 2: SUCCESS -->
+    <div *ngIf="loggedIn">
+      <h3>Login / Register Success ✅</h3>
+
+      <p><b>Email:</b> {{ email }}</p>
+      <p><b>Okta User ID:</b> {{ oktaUserId }}</p>
+      <p><b>Provider:</b> {{ provider }}</p>
+      <p><b>Status:</b> ACTIVE</p>
+
+      <p *ngIf="!hasPassword" class="warning">
+        ⚠ Password not set for this account
+      </p>
+
+      <button *ngIf="!hasPassword" (click)="redirectToSetPassword()">
+        Set Password
+      </button>
+
+      <button (click)="logout()">Logout</button>
+    </div>
+
+  </div>
+</div>
