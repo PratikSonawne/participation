@@ -17,6 +17,7 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   sdkStatus = 'NOT CONNECTED';
   isMuted = false;
+accessToken = '';
 
   participants: Participant[] = [];
   logs: string[] = [];
@@ -65,6 +66,7 @@ await this.loadMeetingUUID();
 
       await zoomSdk.config({
         capabilities: [
+           'authorize',  
           'getMeetingUUID',          // 🔴 REQUIRED
           'getMeetingParticipants',
           'onParticipantChange',
@@ -203,4 +205,48 @@ async checkRunningContext() {
     this.logs.unshift(`[${time}] ${msg}`);
     console.log(`[${time}] ${msg}`);
   }
+
+async fetchAccessToken() {
+  try {
+    this.log('Generating PKCE values...');
+
+    const codeVerifier = this.generateRandomString(64);
+    const codeChallenge = await this.generateCodeChallenge(codeVerifier);
+    const state = this.generateRandomString(16);
+
+    this.log('Requesting access token via authorize()...');
+
+    const authResponse: any = await zoomSdk.authorize({
+      codeChallenge,
+      state
+    });
+
+    this.log(`Authorize response: ${JSON.stringify(authResponse)}`);
+
+  } catch (e) {
+    console.error(e);
+    this.log('❌ ERROR during authorize()');
+  }
+}
+
+
+  generateRandomString(length: number): string {
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let text = '';
+  for (let i = 0; i < length; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
+}
+async generateCodeChallenge(codeVerifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(codeVerifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
 }

@@ -1,5 +1,13 @@
 <h3>SDK Status: {{ sdkStatus }}</h3>
 
+<h3>Access Token:</h3>
+<div *ngIf="accessToken; else noToken">
+  <textarea rows="4" cols="80">{{ accessToken }}</textarea>
+</div>
+<ng-template #noToken>
+  <p>No Token Available</p>
+</ng-template>
+
 <button (click)="mute()">Mute</button>
 <button (click)="unmute()">Unmute</button>
 
