@@ -44,6 +44,8 @@ accessToken = '';
     const ok = await this.initSdk();
     if (!ok) return;
 await this.checkRunningContext();
+  // ✅ Get token
+  await this.fetchAccessToken();
 await this.loadMeetingUUID();
 
     // 🔴 NEW: Load meeting UUID
