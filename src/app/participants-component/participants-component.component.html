@@ -1,4 +1,4 @@
-<h3>SDK Status: {{ sdkStatus }}</h3>
+<!-- <h3>SDK Status: {{ sdkStatus }}</h3>
 
 <h3>Access Token:</h3>
 <div *ngIf="accessToken; else noToken">
@@ -30,4 +30,19 @@
 <p *ngIf="participants.length === 0">No participants</p>
 
 <h3>Debug Logs</h3>
-<div *ngFor="let log of logs">{{ log }}</div>
+<div *ngFor="let log of logs">{{ log }}</div> -->
+<h3>SDK Status: {{ sdkStatus }}</h3>
+
+<h3>Authorization Code:</h3>
+<p *ngIf="authorizationCode; else noCode">
+  {{ authorizationCode }}
+</p>
+
+<ng-template #noCode>
+  <p>No authorization code yet</p>
+</ng-template>
+
+<h3>Debug Logs</h3>
+<div *ngFor="let log of logs">
+  {{ log }}
+</div>
