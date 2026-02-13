@@ -2,7 +2,7 @@ import { Component, OnInit, NgZone } from '@angular/core';
 import zoomSdk from '@zoom/appssdk';
 
 @Component({
-  selector: 'app-participants-component',
+  selector: 'app-zoom-auth',
   templateUrl: './participants-component.component.html',
   styleUrls: ['./participants-component.component.css']
 })
@@ -24,9 +24,6 @@ export class ParticipantsComponentComponent implements OnInit {
     const sdkOk = await this.initSdk();
     if (!sdkOk) return;
 
-    const inMeeting = await this.checkRunningContext();
-    if (!inMeeting) return;
-
     await this.startOAuthFlow();
   }
 
@@ -38,40 +35,19 @@ export class ParticipantsComponentComponent implements OnInit {
 
       await zoomSdk.config({
         capabilities: [
-          'authorize',
-          'getRunningContext'
+          'authorize'
         ]
       });
 
       this.sdkStatus = 'CONNECTED';
-      this.log('Zoom SDK CONNECTED');
+      this.log('✅ Zoom SDK CONNECTED');
+
       return true;
 
-    } catch (e) {
-      console.error(e);
+    } catch (error: any) {
+      console.error(error);
       this.sdkStatus = 'FAILED';
-      this.log('❌ SDK INIT FAILED');
-      return false;
-    }
-  }
-
-  /* ================= RUNNING CONTEXT ================= */
-
-  async checkRunningContext(): Promise<boolean> {
-    try {
-      const ctx = await zoomSdk.getRunningContext();
-      this.log(`Running Context: ${JSON.stringify(ctx)}`);
-
-      if (ctx?.context !== 'inMeeting') {
-        this.log('⚠️ App is NOT running in meeting context');
-        return false;
-      }
-
-      this.log('✅ App running inside meeting context');
-      return true;
-
-    } catch (e) {
-      this.log('❌ ERROR: Failed to get running context');
+      this.log(`❌ SDK INIT FAILED: ${JSON.stringify(error)}`);
       return false;
     }
   }
@@ -97,34 +73,31 @@ export class ParticipantsComponentComponent implements OnInit {
 
       if (response?.code) {
         this.authorizationCode = response.code;
-        this.log('✅ Authorization code received');
-
-        // 🔥 NEXT STEP:
-        // Send this.authorizationCode + this.codeVerifier to backend
+        this.log('✅ Authorization Code Received Successfully');
       } else {
-        this.log('⚠️ No authorization code returned');
+        this.log('⚠️ No Authorization Code Returned');
       }
 
-    } catch (e: any) {
-      console.error(e);
-      this.log(`❌ AUTHORIZE ERROR: ${JSON.stringify(e)}`);
+    } catch (error: any) {
+      console.error(error);
+      this.log(`❌ AUTHORIZE ERROR: ${JSON.stringify(error)}`);
     }
   }
 
   /* ================= PKCE HELPERS ================= */
 
   generateRandomString(length: number): string {
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let text = '';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
     for (let i = 0; i < length; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length));
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return text;
+    return result;
   }
 
-  async generateCodeChallenge(codeVerifier: string): Promise<string> {
+  async generateCodeChallenge(verifier: string): Promise<string> {
     const encoder = new TextEncoder();
-    const data = encoder.encode(codeVerifier);
+    const data = encoder.encode(verifier);
     const digest = await crypto.subtle.digest('SHA-256', data);
 
     return btoa(String.fromCharCode(...new Uint8Array(digest)))
