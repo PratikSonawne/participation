@@ -25,7 +25,7 @@ export class ZoomDemoComponent implements OnInit {
 
   async ngOnInit() {
     this.log('Zoom Client App Loaded', 'success');
-    await this.initZoomSdk();
+    await this.initZoom();
   }
 
   /* ================= LOGGER ================= */
@@ -40,13 +40,14 @@ export class ZoomDemoComponent implements OnInit {
 
   /* ================= INIT SDK ================= */
 
-  async initZoomSdk() {
+  async initZoom() {
     try {
       this.log('Initializing Zoom SDK...', 'info');
 
       await zoomSdk.config({
         capabilities: [
-          'openUrl' // required for OAuth redirect
+          'getUserContext',
+          'openUrl'
         ]
       });
 
@@ -58,26 +59,26 @@ export class ZoomDemoComponent implements OnInit {
     }
   }
 
-  /* ================= OAUTH INSTALL ================= */
+  /* ================= INSTALL ================= */
 
   async install() {
 
     if (!this.sdkReady) {
-      this.log('SDK not ready yet', 'error');
+      this.log('SDK not ready', 'error');
       return;
     }
 
     try {
-      this.log('Opening OAuth authorization page...', 'info');
+      this.log('Opening OAuth authorization...', 'info');
 
       await zoomSdk.openUrl({
         url: `${this.backendBaseUrl}/api/zoom/install`
       });
 
-      this.log('OAuth page opened in browser', 'success');
+      this.log('OAuth page opened', 'success');
 
     } catch (error: any) {
-      this.log('Failed to open OAuth URL: ' + error.message, 'error');
+      this.log('OAuth openUrl failed: ' + error.message, 'error');
     }
   }
 
@@ -85,22 +86,35 @@ export class ZoomDemoComponent implements OnInit {
 
   async loadMeetings() {
 
+    if (!this.sdkReady) {
+      this.log('SDK not ready', 'error');
+      return;
+    }
+
     this.loading = true;
     this.meetings = [];
 
     try {
-      this.log('Calling backend to fetch meetings...', 'api');
+      this.log('Getting user context...', 'info');
 
-      const response = await fetch(
-        `${this.backendBaseUrl}/api/zoom/meetings`,
-        {
-          method: 'GET',
-          credentials: 'include', // important if using session
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const context: any = await zoomSdk.getUserContext();
+
+      if (!context || !context.uid) {
+        throw new Error('User UID not found from Zoom context');
+      }
+
+      const userId = context.uid;
+
+      this.log('Zoom UID: ' + userId, 'success');
+
+      const url = `${this.backendBaseUrl}/api/zoom/meetings/${userId}`;
+
+      this.log('Calling backend API...', 'api');
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -108,11 +122,11 @@ export class ZoomDemoComponent implements OnInit {
 
       const data = await response.json();
 
-      if (data && data.length > 0) {
-        this.meetings = data;
-        this.log(`Meetings loaded successfully (${data.length})`, 'success');
+      if (data?.body?.meetings?.length > 0) {
+        this.meetings = data.body.meetings;
+        this.log(`Meetings loaded (${this.meetings.length})`, 'success');
       } else {
-        this.log('No meetings found for this user', 'info');
+        this.log('No meetings found', 'info');
       }
 
     } catch (error: any) {
