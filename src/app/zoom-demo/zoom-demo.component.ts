@@ -98,12 +98,13 @@ export class ZoomDemoComponent implements OnInit {
       this.log('Getting user context...', 'info');
 
       const context: any = await zoomSdk.getUserContext();
+      this.log('Full Context: ' + JSON.stringify(context), 'info');
 
-      if (!context || !context.uid) {
+      if (!context || !context.userId) {
         throw new Error('User UID not found from Zoom context');
       }
 
-      const userId = context.uid;
+      const userId = context.userId;
 
       this.log('Zoom UID: ' + userId, 'success');
 
