@@ -78,6 +78,12 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   async syncParticipants() {
     try {
+       const context = await zoomSdk.getRunningContext();
+
+if (context.context !== 'inMeeting') {
+  this.log('Not inside meeting');
+  return;
+}
       const now = new Date().toISOString();
       const res = await zoomSdk.getMeetingParticipants();
 
@@ -150,6 +156,8 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
       this.log('Unmute FAILED');
     }
   }
+
+ 
 
   /* ================= UI LOGS ================= */
 
