@@ -1,30 +1,51 @@
-import { Component, OnInit, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
 import zoomSdk from '@zoom/appssdk';
 
+interface Participant {
+  participantUUID: string;
+  screenName: string;
+  joinTime?: string;
+  leaveTime?: string;
+  
+}
+
 @Component({
-  selector: 'app-zoom-auth',
+  selector: 'app-participants-component',
   templateUrl: './participants-component.component.html',
   styleUrls: ['./participants-component.component.css']
 })
-export class ParticipantsComponentComponent implements OnInit {
+export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
   sdkStatus = 'NOT CONNECTED';
+  isMuted = false;
+
+  participants: Participant[] = [];
   logs: string[] = [];
 
-  private codeVerifier = '';
-  authorizationCode = '';
-
   constructor(private zone: NgZone) {}
+
+  // 🔴 IMPORTANT: handler reference
+  private participantChangeHandler = async () => {
+    this.zone.run(() => {
+      this.log('Participant change detected');
+    });
+    await this.syncParticipants();
+  };
 
   /* ================= LIFECYCLE ================= */
 
   async ngOnInit() {
     this.log('App Loaded');
 
-    const sdkOk = await this.initSdk();
-    if (!sdkOk) return;
+    const ok = await this.initSdk();
+    if (!ok) return;
 
-    await this.startOAuthFlow();
+    await this.syncParticipants();          // initial load
+    this.registerParticipantListener();     // realtime updates
+  }
+
+  ngOnDestroy() {
+    zoomSdk.off('onParticipantChange', this.participantChangeHandler);
   }
 
   /* ================= SDK INIT ================= */
@@ -35,82 +56,104 @@ export class ParticipantsComponentComponent implements OnInit {
 
       await zoomSdk.config({
         capabilities: [
-          'authorize'
+          'getMeetingParticipants',
+          'onParticipantChange',
+          'setAudioState'
         ]
       });
 
       this.sdkStatus = 'CONNECTED';
-      this.log('✅ Zoom SDK CONNECTED');
-
+      this.log('Zoom SDK CONNECTED');
       return true;
 
-    } catch (error: any) {
-      console.error(error);
+    } catch (e) {
+      console.error('Zoom SDK init error:', e);
       this.sdkStatus = 'FAILED';
-      this.log(`❌ SDK INIT FAILED: ${JSON.stringify(error)}`);
+      this.log('SDK INIT FAILED');
       return false;
     }
   }
 
-  /* ================= OAUTH FLOW ================= */
+  /* ================= PARTICIPANT SYNC ================= */
 
-  async startOAuthFlow() {
+  async syncParticipants() {
     try {
-      this.log('Generating PKCE values...');
+      const now = new Date().toISOString();
+      const res = await zoomSdk.getMeetingParticipants();
 
-      this.codeVerifier = this.generateRandomString(64);
-      const codeChallenge = await this.generateCodeChallenge(this.codeVerifier);
-      const state = this.generateRandomString(16);
+      // 🔴 NgZone is MUST for UI update
+      this.zone.run(() => {
 
-      this.log('Calling zoomSdk.authorize()...');
+        // JOIN detection
+        res.participants.forEach((p: any) => {
+          const exists = this.participants.find(
+            x => x.participantUUID === p.participantUUID
+          );
 
-      const response: any = await zoomSdk.authorize({
-        codeChallenge,
-        state
+          if (!exists) {
+            this.participants.push({
+              participantUUID: p.participantUUID,
+              screenName: p.screenName,
+              joinTime: now
+            });
+            this.log(`JOIN: ${p.screenName}`);
+          }
+        });
+
+        // LEAVE detection
+        this.participants.forEach(p => {
+          const stillHere = res.participants.some(
+            (rp: any) => rp.participantUUID === p.participantUUID
+          );
+
+          if (!stillHere && !p.leaveTime) {
+            p.leaveTime = now;
+            this.log(`LEAVE: ${p.screenName}`);
+          }
+        });
+
       });
 
-      this.log(`Authorize Response: ${JSON.stringify(response)}`);
-
-      if (response?.code) {
-        this.authorizationCode = response.code;
-        this.log('✅ Authorization Code Received Successfully');
-      } else {
-        this.log('⚠️ No Authorization Code Returned');
-      }
-
-    } catch (error: any) {
-      console.error(error);
-      this.log(`❌ AUTHORIZE ERROR: ${JSON.stringify(error)}`);
+    } catch (e) {
+      console.error(e);
+      this.log('Participant sync FAILED');
     }
   }
 
-  /* ================= PKCE HELPERS ================= */
+  registerParticipantListener() {
+    zoomSdk.on('onParticipantChange', this.participantChangeHandler);
+  }
 
-  generateRandomString(length: number): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
+  /* ================= AUDIO CONTROL ================= */
+
+  async mute() {
+    try {
+      await zoomSdk.setAudioState({ audio: false });
+      this.zone.run(() => {
+        this.isMuted = true;
+        this.log('Muted self');
+      });
+    } catch {
+      this.log('Mute FAILED');
     }
-    return result;
   }
 
-  async generateCodeChallenge(verifier: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(verifier);
-    const digest = await crypto.subtle.digest('SHA-256', data);
-
-    return btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+  async unmute() {
+    try {
+      await zoomSdk.setAudioState({ audio: true });
+      this.zone.run(() => {
+        this.isMuted = false;
+        this.log('Unmuted self');
+      });
+    } catch {
+      this.log('Unmute FAILED');
+    }
   }
 
-  /* ================= LOG ================= */
+  /* ================= UI LOGS ================= */
 
-  log(message: string) {
+  log(msg: string) {
     const time = new Date().toLocaleTimeString();
-    this.logs.unshift(`[${time}] ${message}`);
-    console.log(`[${time}] ${message}`);
+    this.logs.unshift(`[${time}] ${msg}`);
   }
 }

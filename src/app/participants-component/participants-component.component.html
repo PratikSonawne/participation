@@ -1,15 +1,24 @@
 <h3>SDK Status: {{ sdkStatus }}</h3>
 
-<h3>Authorization Code:</h3>
-<p *ngIf="authorizationCode; else noCode">
-  {{ authorizationCode }}
-</p>
+<button (click)="mute()">Mute</button>
+<button (click)="unmute()">Unmute</button>
 
-<ng-template #noCode>
-  <p>No authorization code yet</p>
-</ng-template>
+<h3>Participants ({{ participants.length }})</h3>
+
+<table *ngIf="participants.length > 0">
+  <tr>
+    <th>Name</th>
+    <th>Join Time</th>
+    <th>Leave Time</th>
+  </tr>
+  <tr *ngFor="let p of participants">
+    <td>{{ p.screenName }}</td>
+    <td>{{ p.joinTime || '-' }}</td>
+    <td>{{ p.leaveTime || '-' }}</td>
+  </tr>
+</table>
+
+<p *ngIf="participants.length === 0">No participants</p>
 
 <h3>Debug Logs</h3>
-<div *ngFor="let log of logs">
-  {{ log }}
-</div>
+<div *ngFor="let log of logs">{{ log }}</div>
