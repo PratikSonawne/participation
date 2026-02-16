@@ -54,14 +54,14 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
     try {
       this.log('Initializing Zoom SDK...');
 
-      await zoomSdk.config({
-        capabilities: [
-          'getMeetingContext',
-          'getMeetingParticipants',
-          'onParticipantChange',
-          'setAudioState'
-        ]
-      });
+     await zoomSdk.config({
+  capabilities: [
+    'getMeetingParticipants',
+    'onParticipantChange',
+    'setAudioState'
+  ]
+});
+
 
       this.sdkStatus = 'CONNECTED';
       this.log('Zoom SDK CONNECTED');
