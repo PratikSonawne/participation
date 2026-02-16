@@ -16,16 +16,19 @@ interface ZoomMeeting {
 export class ZoomDemoComponent implements OnInit {
 
   meetings: ZoomMeeting[] = [];
-  logs: { message: string, type: string }[] = [];
-  sdkReady = false;
-  loading = false;
+  logs: { message: string; type: string }[] = [];
 
-  ngOnInit() {
-    this.log('Zoom App Loaded', 'success');
-    this.initZoom();
+  loading = false;
+  sdkReady = false;
+
+  backendBaseUrl = 'https://debate-resistant-logged-barry.trycloudflare.com';
+
+  async ngOnInit() {
+    this.log('Zoom Client App Loaded', 'success');
+    await this.initZoomSdk();
   }
 
-  /* ---------------- LOGGER ---------------- */
+  /* ================= LOGGER ================= */
 
   log(message: string, type: string = 'info') {
     const time = new Date().toLocaleTimeString();
@@ -35,74 +38,87 @@ export class ZoomDemoComponent implements OnInit {
     });
   }
 
-  /* ---------------- INIT SDK ---------------- */
+  /* ================= INIT SDK ================= */
 
-  async initZoom() {
+  async initZoomSdk() {
     try {
       this.log('Initializing Zoom SDK...', 'info');
 
       await zoomSdk.config({
-        capabilities: ['getUserContext']
+        capabilities: [
+          'openUrl' // required for OAuth redirect
+        ]
       });
 
       this.sdkReady = true;
       this.log('Zoom SDK READY', 'success');
 
-    } catch (e: any) {
-      this.log('Zoom SDK Init Failed: ' + e.message, 'error');
+    } catch (error: any) {
+      this.log('Zoom SDK Init Failed: ' + error.message, 'error');
     }
   }
 
-  /* ---------------- LOAD MEETINGS ---------------- */
+  /* ================= OAUTH INSTALL ================= */
 
-  async loadMeetings() {
+  async install() {
 
     if (!this.sdkReady) {
-      this.log('Zoom SDK not ready yet', 'error');
+      this.log('SDK not ready yet', 'error');
       return;
     }
+
+    try {
+      this.log('Opening OAuth authorization page...', 'info');
+
+      await zoomSdk.openUrl({
+        url: `${this.backendBaseUrl}/api/zoom/install`
+      });
+
+      this.log('OAuth page opened in browser', 'success');
+
+    } catch (error: any) {
+      this.log('Failed to open OAuth URL: ' + error.message, 'error');
+    }
+  }
+
+  /* ================= LOAD MEETINGS ================= */
+
+  async loadMeetings() {
 
     this.loading = true;
     this.meetings = [];
 
     try {
-      this.log('Getting Zoom user context...', 'info');
+      this.log('Calling backend to fetch meetings...', 'api');
 
-      const context: any = await zoomSdk.getUserContext();
+      const response = await fetch(
+        `${this.backendBaseUrl}/api/zoom/meetings`,
+        {
+          method: 'GET',
+          credentials: 'include', // important if using session
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-const userId = context.userId || context.uid;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
 
-this.log('User ID: ' + userId);
-
-
-      const url =
-        `https://debate-resistant-logged-barry.trycloudflare.com/api/zoom/meetings/${context.userId}`;
-
-      this.log('Calling backend API...', 'api');
-
-      const res = await fetch(url);
-      const data = await res.json();
+      const data = await response.json();
 
       if (data && data.length > 0) {
         this.meetings = data;
-        this.log('Meetings loaded successfully (' + data.length + ')', 'success');
+        this.log(`Meetings loaded successfully (${data.length})`, 'success');
       } else {
-        this.log('No meetings found', 'info');
+        this.log('No meetings found for this user', 'info');
       }
 
-    } catch (err: any) {
-      this.log('Load Meetings Failed: ' + err.message, 'error');
+    } catch (error: any) {
+      this.log('Load Meetings Failed: ' + error.message, 'error');
     }
 
     this.loading = false;
-  }
-
-  /* ---------------- INSTALL ---------------- */
-
-  install() {
-    this.log('Redirecting to OAuth install...', 'info');
-
-    window.location.href =
-      'https://debate-resistant-logged-barry.trycloudflare.com/api/zoom/install';
   }
 }
