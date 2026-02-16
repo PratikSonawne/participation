@@ -114,10 +114,11 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
       });
 
-    } catch (e) {
-      console.error(e);
-      this.log('Participant sync FAILED');
-    }
+    } catch (e: any) {
+  console.error('Participant Sync Error:', e);
+  this.log('Participant sync FAILED: ' + JSON.stringify(e));
+}
+
   }
 
   registerParticipantListener() {
