@@ -56,6 +56,11 @@ export class ParticipantsComponentComponent implements OnInit, OnDestroy {
 
       await zoomSdk.config({
         capabilities: [
+          'getMeetingContext',
+
+        // 🔹 Participants
+        'getMeetingParticipants',
+        'onParticipantChange',
           'getMeetingParticipants',
           'onParticipantChange',
           'setAudioState'
