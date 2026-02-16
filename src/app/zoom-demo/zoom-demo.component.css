@@ -1,0 +1,40 @@
+button {
+  margin: 5px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+table {
+  width: 100%;
+  margin-top: 15px;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+th {
+  background: #f4f4f4;
+}
+
+.loading {
+  margin-top: 10px;
+  color: blue;
+}
+
+.logs {
+  background: #111;
+  padding: 10px;
+  margin-top: 20px;
+  height: 320px;
+  overflow-y: auto;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.log-info { color: #00d4ff; }
+.log-error { color: #ff4d4d; }
+.log-success { color: #00ff90; }
+.log-api { color: #ffd000; }

@@ -1,0 +1,44 @@
+<h2>Zoom App Demo</h2>
+
+<button (click)="install()">Add App</button>
+<button (click)="loadMeetings()">Load My Meetings</button>
+
+<div *ngIf="loading" class="loading">
+  Loading meetings...
+</div>
+
+<!-- Meetings Table -->
+<table *ngIf="meetings.length > 0">
+  <tr>
+    <th>ID</th>
+    <th>Topic</th>
+    <th>Start Time</th>
+    <th>Join</th>
+  </tr>
+  <tr *ngFor="let m of meetings">
+    <td>{{ m.id }}</td>
+    <td>{{ m.topic }}</td>
+    <td>{{ m.start_time }}</td>
+    <td>
+      <a [href]="m.join_url" target="_blank">Join</a>
+    </td>
+  </tr>
+</table>
+
+<div *ngIf="!loading && meetings.length === 0">
+  No meetings to display
+</div>
+
+<h3>🔍 Live Debug Console</h3>
+
+<div class="logs">
+  <div *ngFor="let log of logs"
+       [ngClass]="{
+         'log-info': log.type === 'info',
+         'log-error': log.type === 'error',
+         'log-success': log.type === 'success',
+         'log-api': log.type === 'api'
+       }">
+    {{ log.message }}
+  </div>
+</div>

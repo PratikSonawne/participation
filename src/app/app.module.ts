@@ -9,6 +9,7 @@ import { LoginComponent } from './login/login.component';
 import { OKTA_CONFIG, OktaAuthModule } from '@okta/okta-angular';
 import { oktaConfig } from './okta.config';
 import { FormsModule } from '@angular/forms';
+import { ZoomDemoComponent } from './zoom-demo/zoom-demo.component';
 
 
 
@@ -16,7 +17,8 @@ import { FormsModule } from '@angular/forms';
   declarations: [
     AppComponent,
     ParticipantsComponentComponent,
-    LoginComponent
+    LoginComponent,
+    ZoomDemoComponent
   ],
   imports: [
     BrowserModule,
