@@ -1,0 +1,18 @@
+.participant {
+  padding: 6px;
+  border-bottom: 1px solid #ddd;
+}
+
+.host {
+  font-weight: bold;
+  color: green;
+}
+
+.logs {
+  margin-top: 15px;
+  padding: 10px;
+  background: #f4f4f4;
+  height: 150px;
+  overflow-y: auto;
+  font-size: 12px;
+}

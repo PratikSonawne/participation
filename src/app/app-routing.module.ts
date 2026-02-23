@@ -4,6 +4,7 @@ import { OktaCallbackComponent } from '@okta/okta-angular';
 import { LoginComponent } from './login/login.component';
 import { ParticipantsComponentComponent } from './participants-component/participants-component.component';
 import { ZoomDemoComponent } from './zoom-demo/zoom-demo.component';
+import { MeetingParticipantsHostchangeComponent } from './meeting-participants-hostchange/meeting-participants-hostchange.component';
 
 // const routes: Routes = [
 //   { path: 'login', component: ParticipantsComponentComponent },
@@ -15,7 +16,7 @@ import { ZoomDemoComponent } from './zoom-demo/zoom-demo.component';
 //   { path: '', redirectTo: 'login', pathMatch: 'full' }
 // ];
 const routes: Routes = [
-  { path: 'login', component: ZoomDemoComponent },
+  { path: 'login', component: MeetingParticipantsHostchangeComponent },
   { path: '', redirectTo: 'login', pathMatch: 'full' }
 ];
 

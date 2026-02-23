@@ -10,6 +10,7 @@ import { OKTA_CONFIG, OktaAuthModule } from '@okta/okta-angular';
 import { oktaConfig } from './okta.config';
 import { FormsModule } from '@angular/forms';
 import { ZoomDemoComponent } from './zoom-demo/zoom-demo.component';
+import { MeetingParticipantsHostchangeComponent } from './meeting-participants-hostchange/meeting-participants-hostchange.component';
 
 
 
@@ -18,7 +19,8 @@ import { ZoomDemoComponent } from './zoom-demo/zoom-demo.component';
     AppComponent,
     ParticipantsComponentComponent,
     LoginComponent,
-    ZoomDemoComponent
+    ZoomDemoComponent,
+    MeetingParticipantsHostchangeComponent
   ],
   imports: [
     BrowserModule,

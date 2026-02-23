@@ -1,0 +1,17 @@
+<h2>Meeting Participants</h2>
+
+<div class="participant"
+     *ngFor="let p of participants"
+     [class.host]="p.role === 1">
+
+  {{ p.displayName }} ({{ getRole(p.role) }})
+
+</div>
+
+<h3>Debug Logs</h3>
+
+<div class="logs">
+  <div *ngFor="let log of logs">
+    {{ log }}
+  </div>
+</div>
