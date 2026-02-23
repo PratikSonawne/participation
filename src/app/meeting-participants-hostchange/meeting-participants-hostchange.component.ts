@@ -61,12 +61,12 @@ export class MeetingParticipantsHostchangeComponent implements OnInit {
   private async loadParticipants(): Promise<void> {
     try {
       const response: any = await zoomSdk.getMeetingParticipants();
-this.log('Received participants response'+response);
+this.log('Received participants response'+JSON.stringify(response));
       console.log('RAW SDK RESPONSE:', response);
       console.log("Participants Raw List:", response.participants);
 
 response.participants.forEach((p: any) => {
-  this.log("Participant Detail:"+ p);
+  this.log("Participant Detail:"+ JSON.stringify(p));
 });
 
       if (!response || !response.participants) {
