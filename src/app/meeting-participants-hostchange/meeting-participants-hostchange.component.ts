@@ -35,13 +35,13 @@ export class MeetingParticipantsHostchangeComponent implements OnInit {
 
   private async initializeZoom(): Promise<void> {
     try {
-      await zoomSdk.config({
-        capabilities: [
-          'getMeetingParticipants',
-          'onParticipantChange'
-        ]
-      });
-
+    await zoomSdk.config({
+  capabilities: [
+    'getMeetingContext',
+    'getMeetingParticipants',
+    'onParticipantChange'
+  ]
+});
       this.log('✅ Zoom SDK configured successfully');
 
       await this.loadParticipants();
@@ -61,8 +61,13 @@ export class MeetingParticipantsHostchangeComponent implements OnInit {
   private async loadParticipants(): Promise<void> {
     try {
       const response: any = await zoomSdk.getMeetingParticipants();
-
+this.log('Received participants response'+response);
       console.log('RAW SDK RESPONSE:', response);
+      console.log("Participants Raw List:", response.participants);
+
+response.participants.forEach((p: any) => {
+  this.log("Participant Detail:"+ p);
+});
 
       if (!response || !response.participants) {
         this.log('⚠ No participants data received');
